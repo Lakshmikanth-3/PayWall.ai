@@ -1,5 +1,7 @@
+import json
+import os
 import numpy as np
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app import models, schemas
@@ -7,6 +9,27 @@ from app.database import get_db
 from app.ml import intent_matcher
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+EVAL_REPORT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "eval_report.json"
+)
+
+
+@router.get("/holdout-metrics")
+def get_holdout_metrics():
+    """
+    Metrics computed offline against the 20,000-row held-out synthetic
+    dataset (backend/scripts/evaluate_dataset.py) — independent of whatever
+    is currently in the live demo database. See PRD Section 18-19.
+    """
+    if not os.path.exists(EVAL_REPORT_PATH):
+        raise HTTPException(
+            status_code=404,
+            detail="No held-out evaluation report found. Run scripts/generate_dataset.py "
+                   "then scripts/evaluate_dataset.py to produce one.",
+        )
+    with open(EVAL_REPORT_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 @router.post("/llm-toggle")

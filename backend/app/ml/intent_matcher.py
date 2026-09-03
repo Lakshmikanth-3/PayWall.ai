@@ -63,7 +63,7 @@ def _model_for(client) -> str:
     return GROQ_MODEL if settings.GROQ_API_KEY else OPENAI_MODEL
 
 
-def _keyword_intent_match(user_intent: str, product: str, category: str, amount: float, max_amount: float) -> float:
+def keyword_intent_match(user_intent: str, product: str, category: str, amount: float, max_amount: float) -> float:
     """Deterministic keyword-overlap similarity scorer (0–1)."""
     intent_words = set(re.findall(r"\w+", user_intent.lower()))
     product_words = set(re.findall(r"\w+", product.lower()))
@@ -131,7 +131,7 @@ Return ONLY a single-line JSON object, reasoning under 12 words, no markdown:
         except Exception:
             pass  # fall through to keyword scorer
 
-    score = _keyword_intent_match(user_intent, product, category, amount, max_amount)
+    score = keyword_intent_match(user_intent, product, category, amount, max_amount)
     reasoning = (
         f"Keyword-based match: {score:.2f} "
         f"(LLM unavailable — deterministic fallback)"

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { fetchMetrics } from "@/lib/api";
-import { BarChart2, TrendingUp, ShieldCheck, Clock } from "lucide-react";
+import { fetchMetrics, fetchHoldoutMetrics } from "@/lib/api";
+import { BarChart2, TrendingUp, ShieldCheck, Clock, Database } from "lucide-react";
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 interface Metrics {
@@ -12,12 +12,24 @@ interface Metrics {
   p50_latency: number; p95_latency: number;
 }
 
+interface HoldoutReport {
+  dataset: { holdout_size: number; seed: number; note: string };
+  detection: { precision: number; recall: number; f1: number; roc_auc: number | null; tp: number; fp: number; fn: number; tn: number };
+  false_positive_cost: { false_positive_rate: number; legitimate_transactions_blocked: number; legitimate_gmv_blocked: number };
+  money_protected: { total_transactions: number; total_gmv: number; risky_gmv: number; risky_gmv_blocked: number; pct_risky_gmv_protected: number };
+  decisions: { allow_rate: number; review_rate: number; block_rate: number };
+  scenario_breakdown: Record<string, { count: number; allow_rate: number; review_rate: number; block_rate: number }>;
+  latency_ms: { p50: number; p95: number; avg: number };
+}
+
 export default function MetricsPage() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [holdout, setHoldout] = useState<HoldoutReport | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchMetrics().then(setMetrics).catch(() => {}).finally(() => setLoading(false));
+    fetchHoldoutMetrics().then(setHoldout).catch(() => {});
   }, []);
 
   if (loading) return <div className="flex items-center justify-center h-full text-slate-400">Loading metrics...</div>;
@@ -126,6 +138,77 @@ export default function MetricsPage() {
             <p className="text-2xl font-bold text-blue-400">{metrics.avg_decision_latency_ms.toFixed(0)}ms</p>
           </div>
         </div>
+      </div>
+
+      {/* Held-out dataset evaluation */}
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <Database className="w-4 h-4 text-violet-400" />
+          <h2 className="text-lg font-bold text-white">Held-Out Dataset Evaluation</h2>
+        </div>
+        <p className="text-slate-500 text-xs mb-4">
+          {holdout
+            ? `Computed once against a ${holdout.dataset.holdout_size.toLocaleString()}-row synthetic holdout split (seed ${holdout.dataset.seed}) — never used to tune thresholds. Independent of the live demo data above.`
+            : "Run backend/scripts/generate_dataset.py then evaluate_dataset.py to populate this section."}
+        </p>
+
+        {holdout && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <MetricCard label="Precision" value={`${(holdout.detection.precision * 100).toFixed(1)}%`} color="#10b981" />
+              <MetricCard label="Recall" value={`${(holdout.detection.recall * 100).toFixed(1)}%`} sub="Attacks caught (REVIEW/BLOCK)" color="#6366f1" />
+              <MetricCard label="F1 Score" value={`${(holdout.detection.f1 * 100).toFixed(1)}%`} color="#8b5cf6" />
+              <MetricCard
+                label="ROC-AUC"
+                value={holdout.detection.roc_auc !== null ? `${(holdout.detection.roc_auc * 100).toFixed(1)}%` : "—"}
+                color="#f59e0b"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <MetricCard
+                label="Legit Transactions Wrongly Blocked"
+                value={holdout.false_positive_cost.legitimate_transactions_blocked.toLocaleString()}
+                sub={`₹${holdout.false_positive_cost.legitimate_gmv_blocked.toLocaleString()} GMV`}
+                color={holdout.false_positive_cost.legitimate_transactions_blocked === 0 ? "#10b981" : "#ef4444"}
+              />
+              <MetricCard
+                label="Risky GMV Protected"
+                value={`${(holdout.money_protected.pct_risky_gmv_protected * 100).toFixed(1)}%`}
+                sub={`₹${holdout.money_protected.risky_gmv_blocked.toLocaleString()} of ₹${holdout.money_protected.risky_gmv.toLocaleString()}`}
+                color="#10b981"
+              />
+              <MetricCard
+                label="Batch Latency (Policy + ML)"
+                value={`P95 ${holdout.latency_ms.p95}ms`}
+                sub={`Avg ${holdout.latency_ms.avg}ms — excludes live LLM call`}
+                color="#3b82f6"
+              />
+            </div>
+
+            <div className="glass p-5 rounded-2xl">
+              <h3 className="text-sm font-semibold text-white mb-3">Detection by Attack Type</h3>
+              <div className="space-y-2">
+                {Object.entries(holdout.scenario_breakdown).map(([scenario, s]) => (
+                  <div key={scenario} className="flex items-center gap-3 text-xs">
+                    <span className="w-40 shrink-0 text-slate-300 capitalize">{scenario.replace(/_/g, " ")}</span>
+                    <span className="w-16 shrink-0 text-slate-500">{s.count.toLocaleString()} txns</span>
+                    <div className="flex-1 flex h-2 rounded-full overflow-hidden bg-white/5">
+                      <div className="bg-emerald-500" style={{ width: `${s.allow_rate * 100}%` }} />
+                      <div className="bg-amber-500" style={{ width: `${s.review_rate * 100}%` }} />
+                      <div className="bg-red-500" style={{ width: `${s.block_rate * 100}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-4 mt-3 text-xs text-slate-500">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Allow</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Review</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Block</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

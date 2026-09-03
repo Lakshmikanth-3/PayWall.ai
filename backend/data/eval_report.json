@@ -1,0 +1,90 @@
+{
+  "dataset": {
+    "holdout_size": 20000,
+    "seed": 42,
+    "note": "Layer 3 uses deterministic keyword matching, not live LLM calls (see script docstring)."
+  },
+  "detection": {
+    "precision": 0.4534,
+    "recall": 1.0,
+    "f1": 0.624,
+    "roc_auc": 0.9309,
+    "tp": 6000,
+    "fp": 7232,
+    "fn": 0,
+    "tn": 6768
+  },
+  "false_positive_cost": {
+    "false_positive_rate": 0.5166,
+    "legitimate_transactions_blocked": 0,
+    "legitimate_gmv_blocked": 0.0
+  },
+  "money_protected": {
+    "total_transactions": 20000,
+    "total_gmv": 101881806.71,
+    "risky_gmv": 33573646.54,
+    "risky_gmv_blocked": 17564709.74,
+    "pct_risky_gmv_protected": 0.5232
+  },
+  "decisions": {
+    "allow_rate": 0.3384,
+    "review_rate": 0.488,
+    "block_rate": 0.1736
+  },
+  "scenario_breakdown": {
+    "anomalous_behavior": {
+      "count": 600,
+      "allow_rate": 0.0,
+      "review_rate": 1.0,
+      "block_rate": 0.0
+    },
+    "budget_violation": {
+      "count": 2000,
+      "allow_rate": 0.0,
+      "review_rate": 0.0,
+      "block_rate": 1.0
+    },
+    "category_violation": {
+      "count": 1000,
+      "allow_rate": 0.0,
+      "review_rate": 0.0,
+      "block_rate": 1.0
+    },
+    "intent_mismatch": {
+      "count": 1000,
+      "allow_rate": 0.0,
+      "review_rate": 0.819,
+      "block_rate": 0.181
+    },
+    "mixed_attack": {
+      "count": 200,
+      "allow_rate": 0.0,
+      "review_rate": 0.0,
+      "block_rate": 1.0
+    },
+    "normal": {
+      "count": 14000,
+      "allow_rate": 0.4834,
+      "review_rate": 0.5166,
+      "block_rate": 0.0
+    },
+    "suspicious_merchant": {
+      "count": 800,
+      "allow_rate": 0.0,
+      "review_rate": 0.8875,
+      "block_rate": 0.1125
+    },
+    "velocity_duplicate": {
+      "count": 400,
+      "allow_rate": 0.0,
+      "review_rate": 1.0,
+      "block_rate": 0.0
+    }
+  },
+  "latency_ms": {
+    "note": "Policy + ML layers only (no LLM network call in batch mode).",
+    "p50": 0.021,
+    "p95": 0.037,
+    "avg": 0.023
+  }
+}

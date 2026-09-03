@@ -12,6 +12,12 @@ export async function fetchMetrics() {
   return res.json();
 }
 
+export async function fetchHoldoutMetrics() {
+  const res = await fetch(`${API_BASE}/dashboard/holdout-metrics`, { cache: "no-store" });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export async function fetchLive(limit = 10) {
   const res = await fetch(`${API_BASE}/dashboard/live?limit=${limit}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch live feed");
