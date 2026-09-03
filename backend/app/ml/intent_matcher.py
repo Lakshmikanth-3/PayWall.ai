@@ -15,9 +15,29 @@ import json
 from typing import Tuple, Optional
 from app.config import settings
 
+# Runtime kill-switch for demo purposes — lets the dashboard simulate an LLM
+# outage (Section 21/27 failure-recovery scenario) without restarting the API.
+_llm_disabled = False
+
+
+def set_llm_disabled(disabled: bool) -> None:
+    global _llm_disabled
+    _llm_disabled = disabled
+
+
+def is_llm_disabled() -> bool:
+    return _llm_disabled
+
+
+GROQ_MODEL = "openai/gpt-oss-20b"
+OPENAI_MODEL = "gpt-4o-mini"
+LLM_TIMEOUT_SECONDS = 4.0
+
 
 def _openai_client():
     """Return a Groq client (OpenAI-compatible). Falls back to OpenAI if Groq key is absent."""
+    if _llm_disabled:
+        return None
     # Prefer Groq
     if settings.GROQ_API_KEY:
         try:
@@ -25,6 +45,7 @@ def _openai_client():
             return OpenAI(
                 api_key=settings.GROQ_API_KEY,
                 base_url="https://api.groq.com/openai/v1",
+                timeout=LLM_TIMEOUT_SECONDS,
             )
         except Exception:
             pass
@@ -32,10 +53,14 @@ def _openai_client():
     if settings.OPENAI_API_KEY:
         try:
             from openai import OpenAI
-            return OpenAI(api_key=settings.OPENAI_API_KEY)
+            return OpenAI(api_key=settings.OPENAI_API_KEY, timeout=LLM_TIMEOUT_SECONDS)
         except Exception:
             pass
     return None
+
+
+def _model_for(client) -> str:
+    return GROQ_MODEL if settings.GROQ_API_KEY else OPENAI_MODEL
 
 
 def _keyword_intent_match(user_intent: str, product: str, category: str, amount: float, max_amount: float) -> float:
@@ -63,9 +88,13 @@ def match_intent(
     category: str,
     amount: float,
     max_amount: float = 0,
-) -> Tuple[float, str, float]:
+) -> Tuple[float, str, float, bool]:
     """
-    Returns (similarity_score 0-1, explanation, latency_ms).
+    Returns (similarity_score 0-1, explanation, latency_ms, llm_used).
+
+    llm_used is False whenever the LLM call did not happen or failed — callers
+    (the decision engine) must treat that as a degraded signal and fail closed
+    rather than trust the keyword fallback score as if it were LLM-grade.
     """
     start = time.perf_counter()
     client = _openai_client()
@@ -82,27 +111,24 @@ Agent's payment request:
   User's stated maximum: ₹{max_amount:,.0f}
 
 Score how well the payment request matches the user's original intent.
-Return ONLY a valid JSON object (no markdown, no extra text):
-{{
-  "score": <float 0.0-1.0>,
-  "reasoning": "<one sentence explaining the score>"
-}}"""
+Return ONLY a single-line JSON object, reasoning under 12 words, no markdown:
+{{"score": <float 0.0-1.0>, "reasoning": "<short phrase>"}}"""
 
-            model = "llama-3.3-70b-versatile" if settings.GROQ_API_KEY else "gpt-4o-mini"
             response = client.chat.completions.create(
-                model=model,
+                model=_model_for(client),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
-                max_tokens=150,
+                max_tokens=300,
             )
             raw = response.choices[0].message.content.strip()
-            data = json.loads(raw)
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            data = json.loads(match.group(0) if match else raw)
             score = float(data["score"])
             reasoning = data.get("reasoning", "")
             latency_ms = (time.perf_counter() - start) * 1000
-            return round(score, 4), reasoning, round(latency_ms, 2)
+            return round(score, 4), reasoning, round(latency_ms, 2), True
 
-        except Exception as e:
+        except Exception:
             pass  # fall through to keyword scorer
 
     score = _keyword_intent_match(user_intent, product, category, amount, max_amount)
@@ -111,7 +137,7 @@ Return ONLY a valid JSON object (no markdown, no extra text):
         f"(LLM unavailable — deterministic fallback)"
     )
     latency_ms = (time.perf_counter() - start) * 1000
-    return score, reasoning, round(latency_ms, 2)
+    return score, reasoning, round(latency_ms, 2), False
 
 
 def generate_explanation(
@@ -140,12 +166,11 @@ Policy Violations: {', '.join(policy_violations) if policy_violations else 'None
 
 Write a clear, concise 1-2 sentence explanation of this decision for the user. Be specific."""
 
-            model = "llama-3.3-70b-versatile" if settings.GROQ_API_KEY else "gpt-4o-mini"
             response = client.chat.completions.create(
-                model=model,
+                model=_model_for(client),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
-                max_tokens=100,
+                max_tokens=200,
             )
             return response.choices[0].message.content.strip()
         except Exception:

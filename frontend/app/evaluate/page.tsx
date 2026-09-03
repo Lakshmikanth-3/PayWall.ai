@@ -1,9 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
-import { fetchAgents, fetchMerchants, evaluateTransaction } from "@/lib/api";
+import { fetchAgents, fetchMerchants, evaluateTransaction, fetchLlmStatus, toggleLlm } from "@/lib/api";
 import DecisionBadge from "@/components/DecisionBadge";
 import RiskMeter from "@/components/RiskMeter";
-import { ShieldCheck, Loader2, CheckCircle, XCircle, AlertCircle, ChevronDown } from "lucide-react";
+import { ShieldCheck, Loader2, CheckCircle, XCircle, AlertCircle, ChevronDown, PowerOff, Power } from "lucide-react";
 
 const DEMO_SCENARIOS = [
   {
@@ -67,11 +67,27 @@ export default function EvaluatePage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
+  const [llmDisabled, setLlmDisabled] = useState(false);
+  const [llmToggling, setLlmToggling] = useState(false);
 
   useEffect(() => {
     fetchAgents().then(setAgents).catch(() => {});
     fetchMerchants().then(setMerchants).catch(() => {});
+    fetchLlmStatus().then(s => setLlmDisabled(s.llm_disabled)).catch(() => {});
   }, []);
+
+  const handleToggleLlm = async () => {
+    setLlmToggling(true);
+    try {
+      const next = !llmDisabled;
+      const r = await toggleLlm(next);
+      setLlmDisabled(r.llm_disabled);
+    } catch {
+      // ignore
+    } finally {
+      setLlmToggling(false);
+    }
+  };
 
   const handleScenario = (s: typeof DEMO_SCENARIOS[0]) => {
     const { label, ...rest } = s;
@@ -100,9 +116,24 @@ export default function EvaluatePage() {
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Transaction Evaluator</h1>
-        <p className="text-slate-400 text-sm mt-1">Test PayWall.ai against any payment scenario in real-time</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Transaction Evaluator</h1>
+          <p className="text-slate-400 text-sm mt-1">Test PayWall.ai against any payment scenario in real-time</p>
+        </div>
+        <button
+          onClick={handleToggleLlm}
+          disabled={llmToggling}
+          title="Simulate the LLM (Layer 3) going down to demonstrate fail-closed behavior"
+          className={`flex items-center gap-2 px-3 py-2 text-xs rounded-xl border transition-all shrink-0 ${
+            llmDisabled
+              ? "bg-red-500/15 border-red-500/30 text-red-300 hover:bg-red-500/25"
+              : "bg-emerald-500/10 border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/20"
+          }`}
+        >
+          {llmDisabled ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+          AI Reasoning: {llmDisabled ? "Disabled" : "Online"}
+        </button>
       </div>
 
       {/* Scenarios */}

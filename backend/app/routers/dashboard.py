@@ -4,8 +4,21 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app import models, schemas
 from app.database import get_db
+from app.ml import intent_matcher
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+
+@router.post("/llm-toggle")
+def toggle_llm(disabled: bool):
+    """Demo control: force the LLM (Layer 3) unavailable to show fail-closed behavior."""
+    intent_matcher.set_llm_disabled(disabled)
+    return {"llm_disabled": intent_matcher.is_llm_disabled()}
+
+
+@router.get("/llm-status")
+def llm_status():
+    return {"llm_disabled": intent_matcher.is_llm_disabled()}
 
 
 @router.get("/stats", response_model=schemas.DashboardStats)

@@ -6,6 +6,7 @@ from datetime import datetime
 from app import models, schemas
 from app.database import get_db
 from app.engine import evaluate
+from app import payments
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -66,11 +67,25 @@ def human_review(
 
     if payload.approved:
         t.decision = "ALLOW"
-        t.payment_status = "APPROVED"
         # Update agent daily spend
         agent = db.query(models.Agent).filter(models.Agent.id == t.agent_id).first()
         if agent:
             agent.daily_spent = (agent.daily_spent or 0) + t.amount
+
+        order_id, payment_status = payments.create_order(
+            amount_inr=t.amount,
+            currency=t.currency,
+            receipt=t.id,
+            notes={"agent_id": t.agent_id, "merchant_id": t.merchant_id, "product": t.product, "human_approved": True},
+        )
+        t.razorpay_order_id = order_id
+        t.payment_status = payment_status
+        db.add(models.AuditLog(
+            id=f"AUD-{__import__('uuid').uuid4().hex[:8].upper()}",
+            transaction_id=txn_id,
+            event_type="PAYMENT_EXECUTION",
+            payload={"razorpay_order_id": order_id, "payment_status": payment_status},
+        ))
     else:
         t.decision = "BLOCK"
         t.payment_status = "DENIED"

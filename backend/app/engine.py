@@ -17,6 +17,7 @@ from app import models, schemas
 from app.config import settings
 from app.ml.risk_model import score_transaction
 from app.ml.intent_matcher import match_intent, generate_explanation
+from app import payments
 
 
 def _reset_daily_spend_if_needed(agent: models.Agent, db: Session):
@@ -120,6 +121,8 @@ def evaluate(
     policy_checks, violations = _run_policy_checks(agent, merchant, req)
     policy_latency_ms = (time.perf_counter() - policy_start) * 1000
 
+    llm_failed_closed = False
+
     # Immediate block on hard violations
     if violations and any(v for v in violations if "Agent" in v or "Merchant" in v or "Daily" in v):
         decision = schemas.Decision.BLOCK
@@ -142,7 +145,7 @@ def evaluate(
         daily_remaining_ratio = max(0, (agent.daily_limit - agent.daily_spent) / agent.daily_limit)
 
         # Intent match (Layer 3) needed for ML features
-        intent_score, reasoning, llm_latency_ms = match_intent(
+        intent_score, reasoning, llm_latency_ms, llm_used = match_intent(
             user_intent=req.user_intent,
             product=req.product,
             category=req.category,
@@ -178,6 +181,23 @@ def evaluate(
         else:
             decision = schemas.Decision.REVIEW
 
+        # ── Fail closed when the LLM is unavailable ───────────────────────────
+        # Per PRD Section 21: never let deterministic-fallback guessing produce
+        # an autonomous ALLOW. Only auto-allow when hard policy alone makes the
+        # transaction unambiguously safe; otherwise degrade to REVIEW.
+        llm_failed_closed = False
+        if not llm_used and decision == schemas.Decision.ALLOW:
+            unambiguously_safe = (
+                not violations
+                and req.amount <= agent.max_transaction * 0.3
+                and merchant.risk_score <= 20
+                and intent_score >= 0.7
+            )
+            if not unambiguously_safe:
+                decision = schemas.Decision.REVIEW
+                llm_failed_closed = True
+                reasoning = "AI reasoning unavailable — unsafe autonomous approval prevented."
+
         # Human approval threshold override
         if (decision == schemas.Decision.ALLOW and
                 agent.requires_approval_above > 0 and
@@ -185,7 +205,12 @@ def evaluate(
             decision = schemas.Decision.REVIEW
 
     # ── LLM explanation (if not already set) ─────────────────────────────────
-    if decision in (schemas.Decision.BLOCK, schemas.Decision.REVIEW):
+    if llm_failed_closed:
+        explanation = (
+            "AI reasoning unavailable. Unsafe autonomous approval prevented. "
+            "Transaction moved to REVIEW as a precaution."
+        )
+    elif decision in (schemas.Decision.BLOCK, schemas.Decision.REVIEW):
         explanation = generate_explanation(
             decision=decision.value,
             policy_violations=violations,
@@ -243,6 +268,28 @@ def evaluate(
         },
     )
     db.add(audit)
+
+    # ── Payment execution (Razorpay test mode) ────────────────────────────────
+    # Only runs after the Guard has already authorized the transaction. A
+    # Razorpay failure never changes the authorization decision — it's
+    # recorded separately, per PRD Section 21 ("authorization and payment
+    # execution must remain separate").
+    if decision == schemas.Decision.ALLOW:
+        order_id, payment_status = payments.create_order(
+            amount_inr=req.amount,
+            currency=req.currency,
+            receipt=txn_id,
+            notes={"agent_id": req.agent_id, "merchant_id": req.merchant_id, "product": req.product},
+        )
+        txn.razorpay_order_id = order_id
+        txn.payment_status = payment_status
+        db.add(models.AuditLog(
+            id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+            transaction_id=txn_id,
+            event_type="PAYMENT_EXECUTION",
+            payload={"razorpay_order_id": order_id, "payment_status": payment_status},
+        ))
+
     db.commit()
 
     confidence = abs(risk_score - 50) / 50 + 0.5

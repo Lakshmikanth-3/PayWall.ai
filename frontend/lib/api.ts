@@ -66,3 +66,17 @@ export async function humanReview(txnId: string, approved: boolean) {
   if (!res.ok) throw new Error("Review failed");
   return res.json();
 }
+
+export async function fetchLlmStatus() {
+  const res = await fetch(`${API_BASE}/dashboard/llm-status`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch LLM status");
+  return res.json();
+}
+
+export async function toggleLlm(disabled: boolean) {
+  const res = await fetch(`${API_BASE}/dashboard/llm-toggle?disabled=${disabled}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to toggle LLM");
+  return res.json();
+}
