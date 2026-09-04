@@ -11,6 +11,7 @@ import {
   BarChart3,
   FlaskConical,
   ChevronRight,
+  Sliders,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/merchants", label: "Merchants", icon: Store },
   { href: "/metrics", label: "Metrics", icon: BarChart3 },
+  { href: "/simulate", label: "Policy Simulator", icon: Sliders },
 ];
 
 export default function Sidebar() {

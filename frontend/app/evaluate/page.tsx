@@ -1,9 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
-import { fetchAgents, fetchMerchants, evaluateTransaction, fetchLlmStatus, toggleLlm } from "@/lib/api";
+import { fetchAgents, fetchMerchants, evaluateTransaction, fetchLlmStatus, toggleLlm, proposeUpsell } from "@/lib/api";
 import DecisionBadge from "@/components/DecisionBadge";
 import RiskMeter from "@/components/RiskMeter";
-import { ShieldCheck, Loader2, CheckCircle, XCircle, AlertCircle, ChevronDown, PowerOff, Power } from "lucide-react";
+import { ShieldCheck, Loader2, CheckCircle, XCircle, AlertCircle, ChevronDown, PowerOff, Power, Sparkles } from "lucide-react";
 
 const DEMO_SCENARIOS = [
   {
@@ -12,13 +12,15 @@ const DEMO_SCENARIOS = [
     agent_id: "AGT-001", merchant_id: "MER-001",
     amount: 4799, category: "sports", product: "Nike Running Shoes",
     user_intent: "Buy running shoes under 5000",
+    is_upsell: false,
   },
   {
-    label: "Intent Manipulation — Protection Plan",
+    label: "Manipulated Upsell — Protection Plan",
     tag: "BLOCK",
     agent_id: "AGT-001", merchant_id: "MER-001",
     amount: 14999, category: "insurance", product: "Premium Protection Plan",
     user_intent: "Buy running shoes under 5000",
+    is_upsell: true,
   },
   {
     label: "Budget Violation — Over Limit",
@@ -26,6 +28,7 @@ const DEMO_SCENARIOS = [
     agent_id: "AGT-001", merchant_id: "MER-009",
     amount: 8500, category: "electronics", product: "Laptop Stand",
     user_intent: "Buy a cheap laptop stand",
+    is_upsell: false,
   },
   {
     label: "Suspicious Merchant",
@@ -33,6 +36,7 @@ const DEMO_SCENARIOS = [
     agent_id: "AGT-001", merchant_id: "MER-007",
     amount: 2000, category: "electronics", product: "USB Hub",
     user_intent: "Buy a USB hub",
+    is_upsell: false,
   },
   {
     label: "Human Review Required",
@@ -40,6 +44,7 @@ const DEMO_SCENARIOS = [
     agent_id: "AGT-001", merchant_id: "MER-010",
     amount: 3500, category: "groceries", product: "Monthly Grocery Pack",
     user_intent: "Order monthly groceries",
+    is_upsell: false,
   },
 ];
 
@@ -53,6 +58,13 @@ interface Result {
   reason: string;
   confidence: number;
   decision_latency_ms: number;
+  is_upsell?: boolean;
+}
+
+interface UpsellResult {
+  proposed: boolean;
+  reason: string;
+  decision?: Result;
 }
 
 export default function EvaluatePage() {
@@ -63,12 +75,15 @@ export default function EvaluatePage() {
     amount: 4799, currency: "INR",
     category: "sports", product: "Nike Running Shoes",
     user_intent: "Buy running shoes under 5000",
+    is_upsell: false,
   });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [llmDisabled, setLlmDisabled] = useState(false);
   const [llmToggling, setLlmToggling] = useState(false);
+  const [upsell, setUpsell] = useState<UpsellResult | null>(null);
+  const [upsellLoading, setUpsellLoading] = useState(false);
 
   useEffect(() => {
     fetchAgents().then(setAgents).catch(() => {});
@@ -90,9 +105,10 @@ export default function EvaluatePage() {
   };
 
   const handleScenario = (s: typeof DEMO_SCENARIOS[0]) => {
-    const { label, ...rest } = s;
+    const { label, tag, ...rest } = s;
     setForm({ ...form, ...rest });
     setResult(null);
+    setUpsell(null);
     setError("");
   };
 
@@ -100,6 +116,7 @@ export default function EvaluatePage() {
     e.preventDefault();
     setLoading(true);
     setResult(null);
+    setUpsell(null);
     setError("");
     try {
       const r = await evaluateTransaction(form);
@@ -108,6 +125,20 @@ export default function EvaluatePage() {
       setError(err instanceof Error ? err.message : "Evaluation failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleProposeUpsell = async () => {
+    if (!result) return;
+    setUpsellLoading(true);
+    setUpsell(null);
+    try {
+      const r = await proposeUpsell(result.transaction_id);
+      setUpsell(r);
+    } catch (err: unknown) {
+      setUpsell({ proposed: false, reason: err instanceof Error ? err.message : "Upsell proposal failed" });
+    } finally {
+      setUpsellLoading(false);
     }
   };
 
@@ -261,7 +292,42 @@ export default function EvaluatePage() {
                   <p className="text-xs text-slate-400 mb-1">AI Explanation</p>
                   <p className="text-sm text-slate-200">{result.reason}</p>
                 </div>
+
+                {result.decision === "ALLOW" && !result.is_upsell && (
+                  <button
+                    onClick={handleProposeUpsell}
+                    disabled={upsellLoading}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-xs bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 transition-all disabled:opacity-50"
+                  >
+                    {upsellLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    {upsellLoading ? "Upsell Agent proposing..." : "Propose Upsell (Section 2a)"}
+                  </button>
+                )}
               </div>
+
+              {/* Upsell proposal result */}
+              {upsell && (
+                <div className={`glass p-5 rounded-2xl border ${
+                  !upsell.proposed ? "border-white/10" :
+                  upsell.decision?.decision === "ALLOW" ? "border-emerald-500/30" :
+                  upsell.decision?.decision === "BLOCK" ? "border-red-500/30" : "border-amber-500/30"
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                    <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Upsell Agent</p>
+                  </div>
+                  <p className="text-sm text-slate-200 mb-2">{upsell.reason}</p>
+                  {upsell.decision && (
+                    <div className="flex items-center gap-3 mt-3">
+                      <DecisionBadge decision={upsell.decision.decision} size="sm" />
+                      <RiskMeter score={upsell.decision.risk_score} size="sm" showLabel={false} />
+                      <span className="text-xs text-slate-400">
+                        Intent match {(upsell.decision.intent_match_score * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Policy checks */}
               <div className="glass p-5 rounded-2xl">

@@ -1,11 +1,15 @@
 """
 Synthetic dataset generator — PRD Section 18.
 
-Generates ~100,000 labeled synthetic transactions across the recommended
-distribution (70k normal / 10k budget violations / 5k category violations /
-5k intent mismatches / 4k suspicious merchants / 3k anomalous behavior /
-2k velocity-duplicate anomalies / 1k mixed attacks), then writes a
-stratified 80/20 train/holdout split.
+Generates the 7,000-row hackathon-MVP-scale dataset (4,900 normal / 700
+budget violations / 350 category violations / 350 intent mismatches / 280
+suspicious merchants / 210 anomalous behavior / 140 velocity-duplicate
+anomalies / 70 mixed attacks — same proportions as the 100k production-scale
+distribution, scaled 1/10th), then writes a stratified 80/20 train/holdout
+split. A third of the mixed_attack rows are flagged is_upsell=True and given
+a high-amount, unrelated-category product (e.g. a "protection plan") to
+represent the Section 2a manipulated-upsell scenario — a bad actor injecting
+an unrelated high-value item into checkout disguised as an upsell.
 
 This dataset lives entirely as offline CSV files under backend/data/ — it is
 NOT loaded into the live application database. It exists purely to compute
@@ -34,16 +38,16 @@ os.makedirs(DATA_DIR, exist_ok=True)
 SEED = 42
 rng = random.Random(SEED)
 
-TOTAL = 100_000
+TOTAL = 7_000
 DISTRIBUTION = {
-    "normal": 70_000,
-    "budget_violation": 10_000,
-    "category_violation": 5_000,
-    "intent_mismatch": 5_000,
-    "suspicious_merchant": 4_000,
-    "anomalous_behavior": 3_000,
-    "velocity_duplicate": 2_000,
-    "mixed_attack": 1_000,
+    "normal": 4_900,
+    "budget_violation": 700,
+    "category_violation": 350,
+    "intent_mismatch": 350,
+    "suspicious_merchant": 280,
+    "anomalous_behavior": 210,
+    "velocity_duplicate": 140,
+    "mixed_attack": 70,
 }
 assert sum(DISTRIBUTION.values()) == TOTAL
 
@@ -159,11 +163,13 @@ def make_intent(product, budget, matching=True):
 
 
 def row(scenario_type, is_risky, agent, merchant, amount, category, product,
-        user_intent, daily_spent_before, txn_hour=0, txn_day=1, merchant_blocked=False):
+        user_intent, daily_spent_before, txn_hour=0, txn_day=1, merchant_blocked=False,
+        is_upsell=False):
     return {
         "transaction_id": f"SYN-{scenario_type[:4].upper()}-{rng.randint(0, 10**9):09d}",
         "scenario_type": scenario_type,
         "is_risky": int(is_risky),
+        "is_upsell": int(is_upsell),
         "agent_id": agent["id"],
         "agent_max_transaction": agent["max_transaction"],
         "agent_daily_limit": agent["daily_limit"],
@@ -198,7 +204,12 @@ def gen_normal(count):
         merchant = rng.choice(LOW_RISK_MERCHANTS)
         category = rng.choice(agent["allowed_categories"])
         product = rng.choice(PRODUCTS_BY_CATEGORY[category])
-        amount = agent["max_transaction"] * rng.uniform(0.1, 0.85)
+        # Up to 97% of the limit — a legitimately-priced item near a tight
+        # budget cap (e.g. the PRD's ₹4,799-of-₹5,000 shoes example) is
+        # ordinary behavior, not an anomaly, as long as the merchant is
+        # clean. Only elevated merchant risk should make a near-ceiling
+        # amount suspicious (see gen_anomalous_behavior).
+        amount = agent["max_transaction"] * rng.uniform(0.1, 0.97)
         daily_spent = rng.uniform(0, agent["daily_limit"] - amount - agent["max_transaction"] * 0.1)
         daily_spent = max(0, daily_spent)
         intent = make_intent(product, agent["max_transaction"], matching=True)
@@ -270,13 +281,16 @@ def gen_suspicious_merchant(count):
 
 def gen_anomalous_behavior(count):
     rows = []
+    MEDIUM_RISK_MERCHANTS = [m for m in MERCHANTS if m["tier"] == "medium"]
     for _ in range(count):
         agent = rng.choice(AGENTS)
-        merchant = rng.choice(LOW_RISK_MERCHANTS + [m for m in MERCHANTS if m["tier"] == "medium"])
+        # Anomalous = near the ceiling AND elevated merchant risk together —
+        # amount alone is not a risk signal (a clean near-ceiling purchase is
+        # ordinary, see gen_normal); the co-occurrence is what's atypical.
+        merchant = rng.choice(MEDIUM_RISK_MERCHANTS)
         category = rng.choice(agent["allowed_categories"])
         product = rng.choice(PRODUCTS_BY_CATEGORY[category])
-        # amount right at the edge of the limit — a sharp deviation from typical spend
-        amount = agent["max_transaction"] * rng.uniform(0.9, 1.0)
+        amount = agent["max_transaction"] * rng.uniform(0.95, 1.0)
         daily_spent = rng.uniform(0, agent["daily_limit"] * 0.2)
         intent = make_intent(product, agent["max_transaction"], matching=True)
         rows.append(row("anomalous_behavior", True, agent, merchant, amount, category, product,
@@ -300,17 +314,39 @@ def gen_velocity_duplicate(count):
 
 
 def gen_mixed_attack(count):
+    """
+    A third of these are the Section 2a "manipulated upsell" flavor: an
+    unrelated, high-value item (protection plan / extended warranty) injected
+    as if it were a checkout add-on for a normal, legitimate original intent —
+    as opposed to the remaining generic mixed attacks, which combine a
+    category violation with an over-budget amount and a mismatched intent.
+    """
     rows = []
-    for _ in range(count):
+    upsell_count = count // 3
+    for i in range(count):
         agent = rng.choice(AGENTS)
         merchant = rng.choice(HIGH_RISK_MERCHANTS)
-        category = rng.choice(agent["blocked_categories"] or RESTRICTED_CATEGORIES)
-        product = rng.choice(PRODUCTS_BY_CATEGORY.get(category, ["Restricted Item"]))
-        amount = agent["max_transaction"] * rng.uniform(0.9, 2.5)
-        daily_spent = agent["daily_limit"] * rng.uniform(0.5, 0.95)
-        intent = make_intent(product, agent["max_transaction"], matching=False)
-        rows.append(row("mixed_attack", True, agent, merchant, amount, category, product,
-                         intent, daily_spent, txn_hour=rng.randint(4, 12), txn_day=rng.randint(10, 30)))
+        if i < upsell_count:
+            category = rng.choice(["insurance", "financial_services"])
+            product = rng.choice(PRODUCTS_BY_CATEGORY[category])
+            amount = agent["max_transaction"] * rng.uniform(1.5, 3.5)
+            daily_spent = agent["daily_limit"] * rng.uniform(0.1, 0.5)
+            # The original, legitimate intent this "upsell" is disguised as
+            # responding to — e.g. running shoes — not the protection plan.
+            original_category = rng.choice(agent["allowed_categories"])
+            original_product = rng.choice(PRODUCTS_BY_CATEGORY[original_category])
+            intent = make_intent(original_product, agent["max_transaction"], matching=True)
+            rows.append(row("mixed_attack", True, agent, merchant, amount, category, product,
+                             intent, daily_spent, txn_hour=rng.randint(4, 12), txn_day=rng.randint(10, 30),
+                             is_upsell=True))
+        else:
+            category = rng.choice(agent["blocked_categories"] or RESTRICTED_CATEGORIES)
+            product = rng.choice(PRODUCTS_BY_CATEGORY.get(category, ["Restricted Item"]))
+            amount = agent["max_transaction"] * rng.uniform(0.9, 2.5)
+            daily_spent = agent["daily_limit"] * rng.uniform(0.5, 0.95)
+            intent = make_intent(product, agent["max_transaction"], matching=False)
+            rows.append(row("mixed_attack", True, agent, merchant, amount, category, product,
+                             intent, daily_spent, txn_hour=rng.randint(4, 12), txn_day=rng.randint(10, 30)))
     return rows
 
 
@@ -326,7 +362,7 @@ GENERATORS = {
 }
 
 FIELDNAMES = [
-    "transaction_id", "scenario_type", "is_risky",
+    "transaction_id", "scenario_type", "is_risky", "is_upsell",
     "agent_id", "agent_max_transaction", "agent_daily_limit", "agent_daily_spent_before",
     "agent_allowed_categories", "agent_blocked_categories", "agent_requires_approval_above",
     "agent_status", "agent_payment_enabled",

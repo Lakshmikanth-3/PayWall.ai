@@ -74,11 +74,18 @@ class Transaction(Base):
 
     # Decision results
     decision = Column(String, nullable=False)
+    decision_id = Column(String, nullable=True, index=True)
     risk_score = Column(Float)
     intent_match_score = Column(Float)
     policy_violations = Column(JSON, default=list)
+    policy_checks = Column(JSON, default=list)
     reason = Column(Text)
     decision_detail = Column(JSON, default=dict)
+
+    # Revenue growth layer — PRD Section 2a
+    is_upsell = Column(Boolean, default=False)
+    upsell_of_transaction_id = Column(String, nullable=True, index=True)
+    attributed_to = Column(String, nullable=True)
 
     # Human review
     requires_human_review = Column(Boolean, default=False)

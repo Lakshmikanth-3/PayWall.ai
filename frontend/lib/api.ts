@@ -33,7 +33,7 @@ export async function fetchTransactions(params: Record<string, string> = {}) {
 
 export async function fetchAudit(params: Record<string, string> = {}) {
   const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${API_BASE}/dashboard/audit?${qs}`, { cache: "no-store" });
+  const res = await fetch(`${API_BASE}/dashboard/audit?${qs}&limit=100`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch audit");
   return res.json();
 }
@@ -84,5 +84,32 @@ export async function toggleLlm(disabled: boolean) {
     method: "POST",
   });
   if (!res.ok) throw new Error("Failed to toggle LLM");
+  return res.json();
+}
+export async function fetchRevenueImpact() {
+  const res = await fetch(`${API_BASE}/dashboard/revenue-impact`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch revenue impact");
+  return res.json();
+}
+
+export async function proposeUpsell(txnId: string) {
+  const res = await fetch(`${API_BASE}/transactions/${txnId}/upsell`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Upsell proposal failed");
+  }
+  return res.json();
+}
+
+export async function simulatePolicy(agentId: string, payload: Record<string, unknown>) {
+  const res = await fetch(`${API_BASE}/agents/${agentId}/simulate-policy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Simulation failed");
+  }
   return res.json();
 }

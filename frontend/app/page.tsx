@@ -1,12 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
-import { fetchStats, fetchMetrics, fetchLive } from "@/lib/api";
+import { fetchStats, fetchMetrics, fetchLive, fetchRevenueImpact } from "@/lib/api";
 import { formatLargeNumber, riskColor, timeAgo } from "@/lib/utils";
 import DecisionBadge from "@/components/DecisionBadge";
 import RiskMeter from "@/components/RiskMeter";
 import {
   ShieldCheck, TrendingUp, AlertTriangle, DollarSign,
-  Activity, Clock, Zap, BarChart2
+  Activity, Clock, Zap, BarChart2, Sparkles, ShieldAlert
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -31,18 +31,26 @@ interface LiveTxn {
   created_at: string;
 }
 
+interface RevenueImpact {
+  upsells_proposed: number; upsells_allowed: number;
+  upsells_blocked: number; upsells_review: number;
+  incremental_gmv: number; upsell_acceptance_rate: number;
+  manipulative_exposure_blocked: number;
+}
+
 const PIE_COLORS = { ALLOW: "#10b981", REVIEW: "#f59e0b", BLOCK: "#ef4444" };
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [live, setLive] = useState<LiveTxn[]>([]);
+  const [revenue, setRevenue] = useState<RevenueImpact | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     try {
-      const [s, m, l] = await Promise.all([fetchStats(), fetchMetrics(), fetchLive(8)]);
-      setStats(s); setMetrics(m); setLive(l);
+      const [s, m, l, r] = await Promise.all([fetchStats(), fetchMetrics(), fetchLive(8), fetchRevenueImpact()]);
+      setStats(s); setMetrics(m); setLive(l); setRevenue(r);
     } catch {/* backend may be offline */}
     finally { setLoading(false); }
   };
@@ -105,6 +113,55 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-xs font-medium text-emerald-400">Guard Active</span>
+        </div>
+      </div>
+
+      {/* Merchant Revenue Impact — PRD Section 17.A */}
+      <div className="glass p-5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent border-emerald-500/15">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            <h2 className="text-sm font-semibold text-white">Merchant Revenue Impact</h2>
+          </div>
+          <p className="text-xs text-slate-500">Upsell Agent — same Guard pipeline, real incremental GMV</p>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="bg-white/3 rounded-xl p-3">
+            <p className="text-xs text-slate-400">Upsells Proposed</p>
+            <p className="text-xl font-bold text-white">{revenue?.upsells_proposed?.toLocaleString() ?? "—"}</p>
+          </div>
+          <div className="bg-white/3 rounded-xl p-3">
+            <p className="text-xs text-slate-400">Allowed</p>
+            <p className="text-xl font-bold text-emerald-400">{revenue?.upsells_allowed?.toLocaleString() ?? "—"}</p>
+          </div>
+          <div className="bg-white/3 rounded-xl p-3">
+            <p className="text-xs text-slate-400">Blocked (manipulative)</p>
+            <p className="text-xl font-bold text-red-400">{revenue?.upsells_blocked?.toLocaleString() ?? "—"}</p>
+          </div>
+          <div className="bg-white/3 rounded-xl p-3">
+            <p className="text-xs text-slate-400">Sent to Review</p>
+            <p className="text-xl font-bold text-amber-400">{revenue?.upsells_review?.toLocaleString() ?? "—"}</p>
+          </div>
+          <div className="bg-white/3 rounded-xl p-3">
+            <p className="text-xs text-slate-400">Acceptance Rate</p>
+            <p className="text-xl font-bold text-white">{revenue ? `${(revenue.upsell_acceptance_rate * 100).toFixed(0)}%` : "—"}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/8 border border-emerald-500/20">
+            <TrendingUp className="w-5 h-5 text-emerald-400 shrink-0" />
+            <div>
+              <p className="text-xs text-slate-400">Incremental GMV from Upsells</p>
+              <p className="text-lg font-bold text-emerald-300">{formatLargeNumber(revenue?.incremental_gmv ?? 0)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/8 border border-red-500/20">
+            <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" />
+            <div>
+              <p className="text-xs text-slate-400">Manipulative-Upsell Exposure Blocked</p>
+              <p className="text-lg font-bold text-red-300">{formatLargeNumber(revenue?.manipulative_exposure_blocked ?? 0)}</p>
+            </div>
+          </div>
         </div>
       </div>
 

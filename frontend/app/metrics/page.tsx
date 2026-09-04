@@ -104,7 +104,7 @@ export default function MetricsPage() {
               <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={{ background: "#0c1220", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, color: "#fff" }}
-                formatter={(v: number) => [`${v.toFixed(1)}ms`, "Latency"]}
+                formatter={(v) => [`${typeof v === "number" ? v.toFixed(1) : v}ms`, "Latency"]}
               />
               <Bar dataKey="value" fill="#6366f1" radius={[6,6,0,0]} />
             </BarChart>

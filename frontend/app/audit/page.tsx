@@ -15,12 +15,13 @@ export default function AuditPage() {
   const [txns, setTxns] = useState<AuditTxn[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<AuditTxn | null>(null);
-  const [filters, setFilters] = useState({ txn_id: "", agent_id: "", decision: "" });
+  const [filters, setFilters] = useState({ txn_id: "", agent_id: "", merchant: "", decision: "" });
 
   const load = useCallback(async () => {
     const params: Record<string, string> = {};
     if (filters.txn_id) params.txn_id = filters.txn_id;
     if (filters.agent_id) params.agent_id = filters.agent_id;
+    if (filters.merchant) params.merchant = filters.merchant;
     if (filters.decision) params.decision = filters.decision;
     try { const d = await fetchAudit(params); setTxns(d); } catch {}
     finally { setLoading(false); }
@@ -47,6 +48,9 @@ export default function AuditPage() {
         </div>
         <input placeholder="Agent ID..." value={filters.agent_id}
           onChange={e => setFilters({...filters, agent_id: e.target.value})}
+          className={`${inputClass} w-36`} />
+        <input placeholder="Merchant..." value={filters.merchant}
+          onChange={e => setFilters({...filters, merchant: e.target.value})}
           className={`${inputClass} w-36`} />
         <select value={filters.decision}
           onChange={e => setFilters({...filters, decision: e.target.value})}

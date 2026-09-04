@@ -1,90 +1,97 @@
 {
   "dataset": {
-    "holdout_size": 20000,
+    "holdout_size": 1400,
     "seed": 42,
     "note": "Layer 3 uses deterministic keyword matching, not live LLM calls (see script docstring)."
   },
   "detection": {
-    "precision": 0.4534,
+    "precision": 0.3039,
     "recall": 1.0,
-    "f1": 0.624,
-    "roc_auc": 0.9309,
-    "tp": 6000,
-    "fp": 7232,
+    "f1": 0.4661,
+    "roc_auc": 1.0,
+    "tp": 420,
+    "fp": 962,
     "fn": 0,
-    "tn": 6768
+    "tn": 18
   },
   "false_positive_cost": {
-    "false_positive_rate": 0.5166,
+    "false_positive_rate": 0.9816,
     "legitimate_transactions_blocked": 0,
     "legitimate_gmv_blocked": 0.0
   },
   "money_protected": {
-    "total_transactions": 20000,
-    "total_gmv": 101881806.71,
-    "risky_gmv": 33573646.54,
-    "risky_gmv_blocked": 17564709.74,
-    "pct_risky_gmv_protected": 0.5232
+    "total_transactions": 1400,
+    "total_gmv": 7719420.79,
+    "risky_gmv": 2511519.85,
+    "risky_gmv_blocked": 2511519.85,
+    "pct_risky_gmv_protected": 1.0
   },
   "decisions": {
-    "allow_rate": 0.3384,
-    "review_rate": 0.488,
-    "block_rate": 0.1736
+    "allow_rate": 0.0129,
+    "review_rate": 0.6871,
+    "block_rate": 0.3
   },
   "scenario_breakdown": {
     "anomalous_behavior": {
-      "count": 600,
+      "count": 42,
       "allow_rate": 0.0,
-      "review_rate": 1.0,
-      "block_rate": 0.0
+      "review_rate": 0.0,
+      "block_rate": 1.0
     },
     "budget_violation": {
-      "count": 2000,
+      "count": 140,
       "allow_rate": 0.0,
       "review_rate": 0.0,
       "block_rate": 1.0
     },
     "category_violation": {
-      "count": 1000,
+      "count": 70,
       "allow_rate": 0.0,
       "review_rate": 0.0,
       "block_rate": 1.0
     },
     "intent_mismatch": {
-      "count": 1000,
+      "count": 70,
       "allow_rate": 0.0,
-      "review_rate": 0.819,
-      "block_rate": 0.181
+      "review_rate": 0.0,
+      "block_rate": 1.0
     },
     "mixed_attack": {
-      "count": 200,
+      "count": 14,
       "allow_rate": 0.0,
       "review_rate": 0.0,
       "block_rate": 1.0
     },
     "normal": {
-      "count": 14000,
-      "allow_rate": 0.4834,
-      "review_rate": 0.5166,
+      "count": 980,
+      "allow_rate": 0.0184,
+      "review_rate": 0.9816,
       "block_rate": 0.0
     },
     "suspicious_merchant": {
-      "count": 800,
+      "count": 56,
       "allow_rate": 0.0,
-      "review_rate": 0.8875,
-      "block_rate": 0.1125
+      "review_rate": 0.0,
+      "block_rate": 1.0
     },
     "velocity_duplicate": {
-      "count": 400,
+      "count": 28,
       "allow_rate": 0.0,
-      "review_rate": 1.0,
-      "block_rate": 0.0
+      "review_rate": 0.0,
+      "block_rate": 1.0
     }
+  },
+  "manipulated_upsell_scenario": {
+    "note": "PRD Section 2a/19 \u2014 'protection plan' style rows disguised as an upsell add-on.",
+    "count": 6,
+    "block_rate": 1.0,
+    "avg_risk_score": 100.0,
+    "avg_intent_match": 0.0
   },
   "latency_ms": {
     "note": "Policy + ML layers only (no LLM network call in batch mode).",
-    "p50": 0.021,
-    "p95": 0.037,
-    "avg": 0.023
+    "p50": 1.962,
+    "p95": 2.986,
+    "avg": 2.12
   }
 }

@@ -9,7 +9,7 @@ Three-layer architecture:
 
 import time
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List, Tuple
 from sqlalchemy.orm import Session
 
@@ -98,10 +98,69 @@ def _run_policy_checks(
     return checks, violations
 
 
+def decide(
+    risk_score: float,
+    violations: List[str],
+    hard_violation: bool,
+    llm_used: bool,
+    intent_score: float,
+    amount: float,
+    agent,
+    merchant,
+) -> Tuple["schemas.Decision", bool]:
+    """
+    Layers 1+2+3 combined into a final ALLOW/REVIEW/BLOCK decision.
+
+    Shared by the live engine (below) and scripts/evaluate_dataset.py so the
+    held-out metrics can never silently drift from what the production API
+    actually does — see PRD Section 19's warning against test-set-tuned
+    numbers that don't reflect the real decision path.
+    """
+    if hard_violation:
+        return schemas.Decision.BLOCK, False
+
+    if risk_score <= settings.ALLOW_THRESHOLD and not violations:
+        decision = schemas.Decision.ALLOW
+    elif risk_score >= settings.REVIEW_THRESHOLD or violations:
+        decision = schemas.Decision.BLOCK
+    else:
+        decision = schemas.Decision.REVIEW
+
+    # ── Fail closed when the LLM is unavailable ───────────────────────────────
+    # Per PRD Section 21: never let deterministic-fallback guessing produce an
+    # autonomous ALLOW. Only auto-allow when hard policy alone makes the
+    # transaction unambiguously safe; otherwise degrade to REVIEW.
+    llm_failed_closed = False
+    if not llm_used and decision == schemas.Decision.ALLOW:
+        unambiguously_safe = (
+            not violations
+            and amount <= agent.max_transaction * 0.3
+            and merchant.risk_score <= 20
+            and intent_score >= 0.7
+        )
+        if not unambiguously_safe:
+            decision = schemas.Decision.REVIEW
+            llm_failed_closed = True
+
+    # Human approval threshold override
+    if (decision == schemas.Decision.ALLOW and
+            agent.requires_approval_above > 0 and
+            amount >= agent.requires_approval_above):
+        decision = schemas.Decision.REVIEW
+
+    return decision, llm_failed_closed
+
+
 def evaluate(
     req: schemas.TransactionEvaluateRequest,
     db: Session,
+    execute_payment: bool = True,
 ) -> schemas.DecisionResponse:
+    """
+    execute_payment=False skips the real Razorpay call while still recording
+    the decision/audit trail — used by scripts/seed_db.py so bulk demo-history
+    generation doesn't create hundreds of real test-mode orders.
+    """
     total_start = time.perf_counter()
 
     # ── Load agent ────────────────────────────────────────────────────────────
@@ -120,89 +179,66 @@ def evaluate(
     policy_start = time.perf_counter()
     policy_checks, violations = _run_policy_checks(agent, merchant, req)
     policy_latency_ms = (time.perf_counter() - policy_start) * 1000
+    hard_violation = bool(violations) and any(
+        v for v in violations if "Agent" in v or "Merchant" in v or "Daily" in v
+    )
 
-    llm_failed_closed = False
+    # ── Layer 3: Intent match — always computed for real (never a hardcoded
+    # placeholder) so the audit trail's intent_match_score is meaningful even
+    # when a hard policy violation blocks the transaction outright. ──────────
+    intent_score, reasoning, llm_latency_ms, llm_used = match_intent(
+        user_intent=req.user_intent,
+        product=req.product,
+        category=req.category,
+        amount=req.amount,
+        max_amount=agent.max_transaction,
+        is_upsell=req.is_upsell,
+    )
 
-    # Immediate block on hard violations
-    if violations and any(v for v in violations if "Agent" in v or "Merchant" in v or "Daily" in v):
-        decision = schemas.Decision.BLOCK
-        risk_score = 95.0
-        intent_score = 0.5
+    # ── Layer 2: ML risk scoring ───────────────────────────────────────────────
+    # Count recent transactions for velocity — must stay windowed to match how
+    # dataset_train.csv's txn_count_last_hour/last_day were generated (a
+    # handful of recent transactions, not the agent's lifetime total).
+    now = datetime.utcnow()
+    recent_hour = db.query(models.Transaction).filter(
+        models.Transaction.agent_id == req.agent_id,
+        models.Transaction.created_at >= now - timedelta(hours=1),
+    ).count()
+    recent_day = db.query(models.Transaction).filter(
+        models.Transaction.agent_id == req.agent_id,
+        models.Transaction.created_at >= now - timedelta(days=1),
+    ).count()
+
+    daily_remaining_ratio = max(0, (agent.daily_limit - agent.daily_spent) / agent.daily_limit)
+
+    ml_features = {
+        "amount": req.amount,
+        "amount_ratio": req.amount / (agent.max_transaction or 1),
+        "merchant_age_days": merchant.age_days,
+        "merchant_risk_score": merchant.risk_score,
+        "txn_count_last_hour": recent_hour,
+        "txn_count_last_day": recent_day,
+        "intent_match_score": intent_score,
+        "category_allowed": 1 if not violations else 0,
+        "daily_budget_remaining_ratio": daily_remaining_ratio,
+        "refund_rate": merchant.refund_rate,
+        "chargeback_rate": merchant.chargeback_rate,
+        "failed_payment_rate": merchant.failed_payment_rate,
+    }
+    risk_score, ml_latency_ms = score_transaction(ml_features)
+
+    # ── Combine policy violations into risk ───────────────────────────────────
+    if violations:
+        risk_score = min(risk_score + 30, 100.0)
+
+    # ── Final decision (Layers 1+2+3 combined) ─────────────────────────────────
+    decision, llm_failed_closed = decide(
+        risk_score, violations, hard_violation, llm_used, intent_score, req.amount, agent, merchant,
+    )
+    if hard_violation:
         reasoning = "; ".join(violations)
-        ml_latency_ms = 0
-        llm_latency_ms = 0
-    else:
-        # ── Layer 2: ML risk scoring ──────────────────────────────────────────
-        # Count recent transactions for velocity
-        recent_hour = db.query(models.Transaction).filter(
-            models.Transaction.agent_id == req.agent_id,
-            models.Transaction.created_at >= datetime.utcnow().replace(minute=0, second=0)
-        ).count()
-        recent_day = db.query(models.Transaction).filter(
-            models.Transaction.agent_id == req.agent_id,
-        ).count()
-
-        daily_remaining_ratio = max(0, (agent.daily_limit - agent.daily_spent) / agent.daily_limit)
-
-        # Intent match (Layer 3) needed for ML features
-        intent_score, reasoning, llm_latency_ms, llm_used = match_intent(
-            user_intent=req.user_intent,
-            product=req.product,
-            category=req.category,
-            amount=req.amount,
-            max_amount=agent.max_transaction,
-        )
-
-        ml_features = {
-            "amount": req.amount,
-            "amount_ratio": req.amount / (agent.max_transaction or 1),
-            "merchant_age_days": merchant.age_days,
-            "merchant_risk_score": merchant.risk_score,
-            "txn_count_last_hour": recent_hour,
-            "txn_count_last_day": recent_day,
-            "intent_match_score": intent_score,
-            "category_allowed": 1 if not violations else 0,
-            "daily_budget_remaining_ratio": daily_remaining_ratio,
-            "refund_rate": merchant.refund_rate,
-            "chargeback_rate": merchant.chargeback_rate,
-            "failed_payment_rate": merchant.failed_payment_rate,
-        }
-        risk_score, ml_latency_ms = score_transaction(ml_features)
-
-        # ── Combine policy violations into risk ───────────────────────────────
-        if violations:
-            risk_score = min(risk_score + 30, 100.0)
-
-        # ── Final decision ────────────────────────────────────────────────────
-        if risk_score <= settings.ALLOW_THRESHOLD and not violations:
-            decision = schemas.Decision.ALLOW
-        elif risk_score >= settings.REVIEW_THRESHOLD or violations:
-            decision = schemas.Decision.BLOCK
-        else:
-            decision = schemas.Decision.REVIEW
-
-        # ── Fail closed when the LLM is unavailable ───────────────────────────
-        # Per PRD Section 21: never let deterministic-fallback guessing produce
-        # an autonomous ALLOW. Only auto-allow when hard policy alone makes the
-        # transaction unambiguously safe; otherwise degrade to REVIEW.
-        llm_failed_closed = False
-        if not llm_used and decision == schemas.Decision.ALLOW:
-            unambiguously_safe = (
-                not violations
-                and req.amount <= agent.max_transaction * 0.3
-                and merchant.risk_score <= 20
-                and intent_score >= 0.7
-            )
-            if not unambiguously_safe:
-                decision = schemas.Decision.REVIEW
-                llm_failed_closed = True
-                reasoning = "AI reasoning unavailable — unsafe autonomous approval prevented."
-
-        # Human approval threshold override
-        if (decision == schemas.Decision.ALLOW and
-                agent.requires_approval_above > 0 and
-                req.amount >= agent.requires_approval_above):
-            decision = schemas.Decision.REVIEW
+    elif llm_failed_closed:
+        reasoning = "AI reasoning unavailable — unsafe autonomous approval prevented."
 
     # ── LLM explanation (if not already set) ─────────────────────────────────
     if llm_failed_closed:
@@ -215,7 +251,7 @@ def evaluate(
             decision=decision.value,
             policy_violations=violations,
             risk_score=risk_score,
-            intent_score=intent_score if 'intent_score' in dir() else 0.5,
+            intent_score=intent_score,
             user_intent=req.user_intent,
             product=req.product,
             amount=req.amount,
@@ -225,10 +261,12 @@ def evaluate(
 
     total_latency_ms = (time.perf_counter() - total_start) * 1000
     txn_id = f"TXN-{uuid.uuid4().hex[:8].upper()}"
+    decision_id = f"DEC-{uuid.uuid4().hex[:8].upper()}"
 
     # ── Persist transaction ───────────────────────────────────────────────────
     txn = models.Transaction(
         id=txn_id,
+        decision_id=decision_id,
         agent_id=req.agent_id,
         user_id=agent.owner_id,
         merchant_id=req.merchant_id,
@@ -240,14 +278,18 @@ def evaluate(
         user_intent=req.user_intent,
         decision=decision.value,
         risk_score=risk_score,
-        intent_match_score=intent_score if 'intent_score' in locals() else 0.5,
+        intent_match_score=intent_score,
         policy_violations=violations,
+        policy_checks=[c.model_dump() for c in policy_checks],
         reason=explanation,
         requires_human_review=(decision == schemas.Decision.REVIEW),
         decision_latency_ms=total_latency_ms,
         policy_latency_ms=round(policy_latency_ms, 2),
-        ml_latency_ms=ml_latency_ms if 'ml_latency_ms' in locals() else 0,
-        llm_latency_ms=llm_latency_ms if 'llm_latency_ms' in locals() else 0,
+        ml_latency_ms=ml_latency_ms,
+        llm_latency_ms=llm_latency_ms,
+        is_upsell=req.is_upsell,
+        upsell_of_transaction_id=req.upsell_of_transaction_id,
+        attributed_to="Upsell Agent" if req.is_upsell else None,
     )
     db.add(txn)
 
@@ -274,7 +316,7 @@ def evaluate(
     # Razorpay failure never changes the authorization decision — it's
     # recorded separately, per PRD Section 21 ("authorization and payment
     # execution must remain separate").
-    if decision == schemas.Decision.ALLOW:
+    if decision == schemas.Decision.ALLOW and execute_payment:
         order_id, payment_status = payments.create_order(
             amount_inr=req.amount,
             currency=req.currency,
@@ -297,13 +339,16 @@ def evaluate(
 
     return schemas.DecisionResponse(
         transaction_id=txn_id,
+        decision_id=decision_id,
         decision=decision,
         risk_score=round(risk_score, 2),
-        intent_match_score=round(intent_score if 'intent_score' in locals() else 0.5, 4),
+        intent_match_score=round(intent_score, 4),
         policy_violations=violations,
         policy_checks=policy_checks,
         reason=explanation,
         confidence=confidence,
         requires_human_review=(decision == schemas.Decision.REVIEW),
         decision_latency_ms=round(total_latency_ms, 2),
+        is_upsell=req.is_upsell,
+        attributed_to="Upsell Agent" if req.is_upsell else None,
     )

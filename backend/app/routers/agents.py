@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import get_db
+from app.simulator import simulate_policy
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -57,3 +58,21 @@ def activate_agent(agent_id: str, db: Session = Depends(get_db)):
     agent.status = "ACTIVE"
     db.commit()
     return {"message": f"Agent {agent_id} activated"}
+
+
+@router.post("/{agent_id}/simulate-policy", response_model=schemas.PolicySimulationResponse)
+def simulate_agent_policy(
+    agent_id: str,
+    payload: schemas.PolicySimulationRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Replays this agent's historical transactions against a proposed policy
+    change (without applying it) and reports the shift in ALLOW/REVIEW/BLOCK
+    outcomes. Section 26 "Policy Simulator" — demonstrates the economic
+    tradeoff between loosening automation and taking on more risk.
+    """
+    agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return simulate_policy(agent, payload, db)

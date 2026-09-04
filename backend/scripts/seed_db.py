@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import uuid
 import random
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from app.database import SessionLocal, engine
 from app import models
@@ -28,7 +28,17 @@ AGENTS = [
         "daily_limit": 10000,
         "allowed_categories": ["food", "groceries", "sports", "electronics"],
         "blocked_categories": ["gambling", "financial_services"],
-        "requires_approval_above": 3000,
+        # PRD Section 19 pins the canonical ₹4,799 running-shoes fixture to
+        # ALLOW; Section 6's own worked example pairs the SAME ₹4,799
+        # purchase with a 3,000 approval threshold while also calling it
+        # ALLOW — those two can't both be literally true under the
+        # requires_approval_above hard-override rule this engine implements
+        # (see app.engine.decide). Resolved in favor of the numeric Section
+        # 19 target: threshold set just above the canonical fixture amount.
+        # The "Human Review Required" demo scenario (MER-010, ₹3,500) still
+        # exercises REVIEW through the risk-score path via that merchant's
+        # medium risk tier, independent of this threshold.
+        "requires_approval_above": 4900,
     },
     {
         "id": "AGT-002",
@@ -99,4 +109,177 @@ db.commit()
 print("[OK] Seeded agents and merchants successfully.")
 print(f"   Agents: {len(AGENTS)}")
 print(f"   Merchants: {len(MERCHANTS)}")
+
+# ── Seed transaction history ────────────────────────────────────────────────
+# A few dozen realistic transactions per agent so the Live Feed, Audit
+# Explorer, dashboard Overview and Policy Simulator have something real to
+# show/replay against. Uses the real LLM (Groq) so the mix of ALLOW/REVIEW/
+# BLOCK looks like genuine semantic decisions rather than the conservative
+# fail-closed fallback (which — correctly — pushes almost everything to
+# REVIEW when the LLM is off, per app.engine's fail-closed rule). Razorpay
+# execution is skipped (execute_payment=False) so this doesn't create dozens
+# of real test-mode orders. This step takes a few minutes due to live LLM
+# calls; safe to re-run only on an empty transactions table.
+
+if not db.query(models.Transaction).first():
+    from app import schemas
+    from app.engine import evaluate
+
+    PRODUCTS = {
+        "food": "Pizza Order", "groceries": "Monthly Grocery Pack", "sports": "Running Shoes",
+        "electronics": "Wireless Mouse", "travel": "Flight Ticket", "hotel": "Hotel Booking",
+        "office": "Office Chair", "stationery": "Notebook Pack", "gambling": "Casino Chips",
+        "financial_services": "Investment Plan",
+    }
+    LOW_RISK_MERCHANT_IDS = ["MER-001", "MER-002", "MER-003", "MER-004", "MER-005", "MER-008", "MER-009"]
+    RISKY_MERCHANT_IDS = ["MER-006", "MER-007", "MER-010"]
+
+    random.seed(7)
+    count = 0
+    BATCH_SIZE = 8  # one simulated calendar day per BATCH_SIZE transactions
+    for a in AGENTS:
+        agent_categories = a["allowed_categories"]
+        agent_row = db.query(models.Agent).filter(models.Agent.id == a["id"]).first()
+        day_index = -1
+        for i in range(35):
+            if i % BATCH_SIZE == 0:
+                # simulate the start of a new business day: reset the running
+                # daily spend AND backdate created_at so the Policy Simulator's
+                # per-day budget replay (grouped by calendar date) matches how
+                # this history was generated, instead of every transaction
+                # landing on "today" and looking like one massive spend spike
+                agent_row.daily_spent = 0.0
+                db.commit()
+                day_index += 1
+            # +2 day floor so even the most recent simulated batch stays
+            # outside the live engine's recent_hour/recent_day velocity
+            # windows (app.engine.evaluate) — otherwise a fixture evaluated
+            # shortly after seeding would see inflated same-agent velocity
+            # from this backfilled history and get misread as anomalous.
+            sim_day = datetime.utcnow() - timedelta(days=2 + (35 // BATCH_SIZE - day_index) * 2)
+            roll = random.random()
+            if roll < 0.75:
+                # normal purchase
+                category = random.choice(agent_categories)
+                product = PRODUCTS.get(category, "General Item")
+                amount = round(a["max_transaction"] * random.uniform(0.1, 0.85), 2)
+                merchant_id = random.choice(LOW_RISK_MERCHANT_IDS)
+                intent = f"Buy {product.lower()} under {int(a['max_transaction'])}"
+            elif roll < 0.85:
+                # budget/amount stress — near or over the limit
+                category = random.choice(agent_categories)
+                product = PRODUCTS.get(category, "General Item")
+                amount = round(a["max_transaction"] * random.uniform(0.9, 1.4), 2)
+                merchant_id = random.choice(LOW_RISK_MERCHANT_IDS)
+                intent = f"Buy {product.lower()}"
+            elif roll < 0.93:
+                # category violation
+                category = random.choice(a["blocked_categories"] or ["gambling"])
+                product = PRODUCTS.get(category, "Restricted Item")
+                amount = round(a["max_transaction"] * random.uniform(0.1, 0.6), 2)
+                merchant_id = random.choice(LOW_RISK_MERCHANT_IDS)
+                intent = "Buy groceries for the week"
+            else:
+                # suspicious merchant
+                category = random.choice(agent_categories)
+                product = PRODUCTS.get(category, "General Item")
+                amount = round(a["max_transaction"] * random.uniform(0.1, 0.5), 2)
+                merchant_id = random.choice(RISKY_MERCHANT_IDS)
+                intent = f"Buy {product.lower()}"
+
+            req = schemas.TransactionEvaluateRequest(
+                agent_id=a["id"], amount=amount, currency="INR", merchant_id=merchant_id,
+                category=category, product=product, user_intent=intent,
+            )
+            try:
+                result = evaluate(req, db, execute_payment=False)
+                txn = db.query(models.Transaction).filter(models.Transaction.id == result.transaction_id).first()
+                txn.created_at = sim_day + timedelta(minutes=(i % BATCH_SIZE) * 17, hours=random.randint(0, 6))
+                db.commit()
+                count += 1
+            except Exception as e:
+                print(f"   [skip] {a['id']} txn {i}: {e}")
+
+    print(f"   Transactions: {count} (seeded via live LLM)")
+else:
+    print("   Transactions: already present, skipped seeding history")
+
+# ── Seed upsell history — PRD Section 2a / 17.A ─────────────────────────────
+# A handful of is_upsell=True transactions so the Merchant Revenue Impact
+# panel shows real numbers on first load instead of all-zeros: some
+# legitimate complementary add-ons (ALLOW → incremental GMV) and a couple of
+# manipulated "protection plan" attempts (BLOCK → exposure prevented).
+if not db.query(models.Transaction).filter(models.Transaction.is_upsell == True).first():  # noqa: E712
+    from app import schemas
+    from app.engine import evaluate
+    from app.upsell_agent import propose_upsell
+
+    def _backdate(txn_id, days_ago, minute_offset):
+        # Same reasoning as the history loop above: keep seeded rows outside
+        # app.engine.evaluate's live recent_hour/recent_day velocity windows
+        # so they don't get misread as anomalous same-agent burst activity
+        # by anyone who evaluates a fresh transaction shortly after seeding
+        # (e.g. scripts/validate_fixtures.py).
+        t = db.query(models.Transaction).filter(models.Transaction.id == txn_id).first()
+        t.created_at = datetime.utcnow() - timedelta(days=days_ago) + timedelta(minutes=minute_offset)
+        db.commit()
+
+    upsell_count = 0
+    agent_row = db.query(models.Agent).filter(models.Agent.id == "AGT-001").first()
+    agent_row.daily_spent = 0.0
+    db.commit()
+
+    for i in range(6):
+        original_amount = round(4000 * random.uniform(0.5, 0.97), 2)
+        original_req = schemas.TransactionEvaluateRequest(
+            agent_id="AGT-001", amount=original_amount, currency="INR", merchant_id="MER-001",
+            category="sports", product="Nike Running Shoes",
+            user_intent="Buy running shoes under 5000",
+        )
+        try:
+            original_result = evaluate(original_req, db, execute_payment=False)
+        except Exception as e:
+            print(f"   [skip] upsell original txn {i}: {e}")
+            continue
+        _backdate(original_result.transaction_id, days_ago=3, minute_offset=i * 5)
+        if original_result.decision.value != "ALLOW":
+            continue
+
+        original_txn = db.query(models.Transaction).filter(models.Transaction.id == original_result.transaction_id).first()
+        candidate = propose_upsell(agent_row, original_txn)
+        if not candidate:
+            continue
+        upsell_req = schemas.TransactionEvaluateRequest(
+            agent_id="AGT-001", amount=candidate["amount"], currency="INR", merchant_id=candidate["merchant_id"],
+            category=candidate["category"], product=candidate["product"],
+            user_intent=original_txn.user_intent,
+            is_upsell=True, upsell_of_transaction_id=original_txn.id,
+        )
+        try:
+            upsell_result = evaluate(upsell_req, db, execute_payment=False)
+            _backdate(upsell_result.transaction_id, days_ago=3, minute_offset=i * 5 + 2)
+            upsell_count += 1
+        except Exception as e:
+            print(f"   [skip] upsell candidate txn {i}: {e}")
+
+    # A couple of manipulated-upsell attempts (Section 7 killer scenario,
+    # tagged as an upsell) — the same Guard blocks these too.
+    for i in range(2):
+        manipulated_req = schemas.TransactionEvaluateRequest(
+            agent_id="AGT-001", amount=14999, currency="INR", merchant_id="MER-001",
+            category="insurance", product="Premium Protection Plan",
+            user_intent="Buy running shoes under 5000",
+            is_upsell=True,
+        )
+        try:
+            manipulated_result = evaluate(manipulated_req, db, execute_payment=False)
+            _backdate(manipulated_result.transaction_id, days_ago=3, minute_offset=30 + i * 5)
+            upsell_count += 1
+        except Exception as e:
+            print(f"   [skip] manipulated upsell txn {i}: {e}")
+
+    print(f"   Upsell history: {upsell_count} transactions (legitimate + manipulated)")
+else:
+    print("   Upsell history: already present, skipped seeding")
+
 db.close()

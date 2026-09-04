@@ -1,16 +1,21 @@
 """
 Held-out evaluation — PRD Section 19.
 
-Runs the SAME decision-engine code paths used in production (Layer 1 hard
-policy checks + Layer 2 risk scoring, from app.engine / app.ml.risk_model)
-against backend/data/dataset_holdout.csv and reports precision/recall/F1/
-ROC-AUC, false-positive cost, money protected, review rate, and latency.
+Runs the SAME decision-engine code (Layer 1 hard policy checks, Layer 2 risk
+scoring, and the shared decide() function from app.engine — not a
+reimplementation) against backend/data/dataset_holdout.csv and reports
+precision/recall/F1/ROC-AUC, false-positive cost, money protected, review
+rate, and latency.
 
 Layer 3 (semantic intent matching) uses the deterministic keyword scorer
-rather than live LLM calls — batch-scoring 20,000 transactions through a
-hosted LLM is neither how a real deployment would run offline evaluation
+rather than live LLM calls — batch-scoring thousands of transactions through
+a hosted LLM is neither how a real deployment would run offline evaluation
 nor within the point of holding out a fixed test set (the LLM path is
 exercised per-transaction in the live API instead, see /transactions/evaluate).
+Because llm_used is always False here, this report also doubles as the
+Section 21 "LLM unavailable" fail-closed scenario at scale: engine.decide()
+applies the same unambiguously-safe-or-REVIEW downgrade it would in
+production with the LLM down.
 
 The holdout set must never be used to tune ALLOW_THRESHOLD/REVIEW_THRESHOLD —
 if you're adjusting thresholds based on these numbers, use dataset_train.csv.
@@ -30,9 +35,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 
-from app.config import settings
 from app import schemas
-from app.engine import _run_policy_checks
+from app.engine import _run_policy_checks, decide
 from app.ml.risk_model import score_transaction
 from app.ml.intent_matcher import keyword_intent_match
 
@@ -74,44 +78,38 @@ def evaluate_row(r):
     start = time.perf_counter()
 
     policy_checks, violations = _run_policy_checks(agent, merchant, req)
+    hard_violation = bool(violations) and any(
+        v for v in violations if "Agent" in v or "Merchant" in v or "Daily" in v
+    )
 
-    if violations and any(v for v in violations if "Agent" in v or "Merchant" in v or "Daily" in v):
-        decision = "BLOCK"
-        risk_score = 95.0
-        intent_score = 0.5
-    else:
-        intent_score = keyword_intent_match(
-            r["user_intent"], r["product"], r["category"], req.amount, agent.max_transaction
-        )
-        daily_remaining_ratio = max(0, (agent.daily_limit - agent.daily_spent) / agent.daily_limit) if agent.daily_limit else 0
-        features = {
-            "amount": req.amount,
-            "amount_ratio": req.amount / (agent.max_transaction or 1),
-            "merchant_age_days": merchant.age_days,
-            "merchant_risk_score": merchant.risk_score,
-            "txn_count_last_hour": int(float(r["txn_count_last_hour"])),
-            "txn_count_last_day": int(float(r["txn_count_last_day"])),
-            "intent_match_score": intent_score,
-            "category_allowed": 1 if not violations else 0,
-            "daily_budget_remaining_ratio": daily_remaining_ratio,
-            "refund_rate": merchant.refund_rate,
-            "chargeback_rate": merchant.chargeback_rate,
-            "failed_payment_rate": merchant.failed_payment_rate,
-        }
-        risk_score, _ = score_transaction(features)
-        if violations:
-            risk_score = min(risk_score + 30, 100.0)
+    intent_score = keyword_intent_match(
+        r["user_intent"], r["product"], r["category"], req.amount, agent.max_transaction
+    )
+    daily_remaining_ratio = max(0, (agent.daily_limit - agent.daily_spent) / agent.daily_limit) if agent.daily_limit else 0
+    features = {
+        "amount": req.amount,
+        "amount_ratio": req.amount / (agent.max_transaction or 1),
+        "merchant_age_days": merchant.age_days,
+        "merchant_risk_score": merchant.risk_score,
+        "txn_count_last_hour": int(float(r["txn_count_last_hour"])),
+        "txn_count_last_day": int(float(r["txn_count_last_day"])),
+        "intent_match_score": intent_score,
+        "category_allowed": 1 if not violations else 0,
+        "daily_budget_remaining_ratio": daily_remaining_ratio,
+        "refund_rate": merchant.refund_rate,
+        "chargeback_rate": merchant.chargeback_rate,
+        "failed_payment_rate": merchant.failed_payment_rate,
+    }
+    risk_score, _ = score_transaction(features)
+    if violations:
+        risk_score = min(risk_score + 30, 100.0)
 
-        if risk_score <= settings.ALLOW_THRESHOLD and not violations:
-            decision = "ALLOW"
-        elif risk_score >= settings.REVIEW_THRESHOLD or violations:
-            decision = "BLOCK"
-        else:
-            decision = "REVIEW"
-
-        if (decision == "ALLOW" and agent.requires_approval_above > 0
-                and req.amount >= agent.requires_approval_above):
-            decision = "REVIEW"
+    # llm_used=False — see module docstring: this also exercises the
+    # Section 21 fail-closed path at scale.
+    decision_enum, _ = decide(
+        risk_score, violations, hard_violation, False, intent_score, req.amount, agent, merchant,
+    )
+    decision = decision_enum.value
 
     latency_ms = (time.perf_counter() - start) * 1000
     return decision, risk_score, intent_score, latency_ms
@@ -126,24 +124,30 @@ def main():
     n = len(rows)
     print(f"Evaluating {n} held-out transactions from {HOLDOUT_PATH} ...")
 
-    y_true, y_pred_blocked, risk_scores, decisions, amounts, latencies, scenario_types = [], [], [], [], [], [], []
+    y_true, y_pred_blocked, risk_scores, intent_scores, decisions, amounts, latencies, scenario_types, is_upsell_flags = (
+        [], [], [], [], [], [], [], [], []
+    )
 
     for r in rows:
         decision, risk_score, intent_score, latency_ms = evaluate_row(r)
         y_true.append(int(r["is_risky"]))
         y_pred_blocked.append(1 if decision in ("BLOCK", "REVIEW") else 0)
         risk_scores.append(risk_score)
+        intent_scores.append(intent_score)
         decisions.append(decision)
         amounts.append(float(r["amount"]))
         latencies.append(latency_ms)
         scenario_types.append(r["scenario_type"])
+        is_upsell_flags.append(int(r.get("is_upsell", 0) or 0))
 
     y_true = np.array(y_true)
     y_pred = np.array(y_pred_blocked)
     risk_scores = np.array(risk_scores)
+    intent_scores = np.array(intent_scores)
     amounts = np.array(amounts)
     decisions = np.array(decisions)
     scenario_types = np.array(scenario_types)
+    is_upsell_flags = np.array(is_upsell_flags)
 
     scenario_breakdown = {}
     for scenario in sorted(set(scenario_types.tolist())):
@@ -212,6 +216,13 @@ def main():
             "block_rate": round(block_rate, 4),
         },
         "scenario_breakdown": scenario_breakdown,
+        "manipulated_upsell_scenario": {
+            "note": "PRD Section 2a/19 — 'protection plan' style rows disguised as an upsell add-on.",
+            "count": int(is_upsell_flags.sum()),
+            "block_rate": round(float(np.mean(decisions[is_upsell_flags == 1] == "BLOCK")), 4) if is_upsell_flags.sum() else None,
+            "avg_risk_score": round(float(np.mean(risk_scores[is_upsell_flags == 1])), 2) if is_upsell_flags.sum() else None,
+            "avg_intent_match": round(float(np.mean(intent_scores[is_upsell_flags == 1])), 4) if is_upsell_flags.sum() else None,
+        },
         "latency_ms": {
             "note": "Policy + ML layers only (no LLM network call in batch mode).",
             "p50": round(float(np.percentile(latencies, 50)), 3),

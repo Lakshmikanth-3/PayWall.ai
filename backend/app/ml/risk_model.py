@@ -88,14 +88,14 @@ def score_transaction(features: dict) -> Tuple[float, float]:
         try:
             feature_vector = _build_feature_vector(features)
             prob = _model.predict_proba([feature_vector])[0][1]
-            risk_score = prob * 100.0
+            risk_score = float(prob) * 100.0
         except Exception:
             risk_score = _heuristic_risk_score(features)
     else:
         risk_score = _heuristic_risk_score(features)
 
     latency_ms = (time.perf_counter() - start) * 1000
-    return round(risk_score, 2), round(latency_ms, 2)
+    return round(float(risk_score), 2), round(float(latency_ms), 2)
 
 
 def _build_feature_vector(features: dict) -> list:

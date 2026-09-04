@@ -63,11 +63,25 @@ def _model_for(client) -> str:
     return GROQ_MODEL if settings.GROQ_API_KEY else OPENAI_MODEL
 
 
+# Filler words in a typical purchase instruction ("Buy running shoes under
+# 5000") carry no product-identity signal, but including them in a plain
+# Jaccard overlap dilutes the ratio enough that even an exact product match
+# rarely clears a high similarity bar. Stripped out so the score reflects
+# actual product/category agreement, not sentence-template noise.
+_STOPWORDS = {
+    "buy", "order", "get", "me", "a", "an", "the", "for", "today", "i", "need",
+    "some", "purchase", "keep", "it", "under", "please", "want", "to", "of",
+}
+
+
 def keyword_intent_match(user_intent: str, product: str, category: str, amount: float, max_amount: float) -> float:
     """Deterministic keyword-overlap similarity scorer (0–1)."""
-    intent_words = set(re.findall(r"\w+", user_intent.lower()))
-    product_words = set(re.findall(r"\w+", product.lower()))
-    category_words = set(re.findall(r"\w+", category.lower()))
+    def _words(text: str) -> set:
+        return {w for w in re.findall(r"[a-zA-Z]+", text.lower()) if w not in _STOPWORDS}
+
+    intent_words = _words(user_intent)
+    product_words = _words(product)
+    category_words = _words(category)
 
     combined = product_words | category_words
     overlap = len(intent_words & combined)
@@ -88,6 +102,7 @@ def match_intent(
     category: str,
     amount: float,
     max_amount: float = 0,
+    is_upsell: bool = False,
 ) -> Tuple[float, str, float, bool]:
     """
     Returns (similarity_score 0-1, explanation, latency_ms, llm_used).
@@ -95,13 +110,43 @@ def match_intent(
     llm_used is False whenever the LLM call did not happen or failed — callers
     (the decision engine) must treat that as a degraded signal and fail closed
     rather than trust the keyword fallback score as if it were LLM-grade.
+
+    is_upsell changes the question being asked. PRD Section 2a: a legitimate
+    upsell is a *complementary add-on* to the original purchase (running socks
+    alongside running shoes) — it will never be the literal same product as
+    the user's intent, so scoring it against "does this match exactly what
+    the user asked for" would wrongly tank every honest upsell. The right
+    question for an upsell is "is this a relevant, in-budget complement to
+    what the user is already buying, or an unrelated/high-value item being
+    smuggled through checkout" (the Section 7 killer scenario).
     """
     start = time.perf_counter()
     client = _openai_client()
 
     if client:
         try:
-            prompt = f"""You are an intent verification system for AI agent payments.
+            if is_upsell:
+                prompt = f"""You are an intent verification system for AI agent payments,
+evaluating a proposed checkout UPSELL — an additional item offered alongside
+a purchase the user already authorized.
+
+User's original intent: "{user_intent}"
+Proposed upsell item:
+  Product: {product}
+  Category: {category}
+  Amount: ₹{amount:,.0f}
+  User's stated maximum (for the original purchase): ₹{max_amount:,.0f}
+
+Score how RELEVANT and CONSISTENT this upsell is with the user's original
+intent — a low-cost, same-category complementary item (e.g. socks offered
+with running shoes) should score HIGH even though it isn't the literal same
+product. An unrelated, high-value, or unrelated-category item (e.g. an
+insurance or protection plan offered during a shoe purchase) should score
+LOW — that is a manipulation attempt, not a genuine complement.
+Return ONLY a single-line JSON object, reasoning under 12 words, no markdown:
+{{"score": <float 0.0-1.0>, "reasoning": "<short phrase>"}}"""
+            else:
+                prompt = f"""You are an intent verification system for AI agent payments.
 
 User's original intent: "{user_intent}"
 Agent's payment request:
