@@ -186,9 +186,11 @@ For the frontend, set `NEXT_PUBLIC_API_URL` to the backend's URL (defaults to `h
 | `POST` | `/agents` | Register an AI agent with a spending policy |
 | `GET` | `/agents` | List all agents |
 | `PATCH` | `/agents/{id}/suspend` \| `/activate` | Revoke or restore payment authority |
+| `DELETE` | `/agents/{id}` | Permanently remove an agent and its transaction/audit history (test data cleanup — real agents should be suspended, not deleted) |
 | `POST` | `/agents/{id}/simulate-policy` | Replay history against a proposed policy change |
 | `POST` | `/merchants` | Register a merchant |
 | `PATCH` | `/merchants/{id}/block` | Block a merchant |
+| `DELETE` | `/merchants/{id}` | Permanently remove a merchant (test data cleanup — real merchants should be blocked, not deleted) |
 | `POST` | `/transactions/evaluate` | Evaluate a payment request through the Guard |
 | `GET` | `/transactions/{id}` | Fetch a transaction's full decision record |
 | `POST` | `/transactions/{id}/review` | Human approve/deny a `REVIEW` transaction (re-checks policy) |
@@ -200,7 +202,7 @@ For the frontend, set `NEXT_PUBLIC_API_URL` to the backend's URL (defaults to `h
 | `GET` | `/dashboard/live` | Latest transactions |
 | `GET` | `/dashboard/audit` | Searchable audit trail |
 | `POST` | `/dashboard/llm-toggle` | Force the LLM offline to demo fail-closed behavior |
-| `POST` | `/admin/seed` | Seed a deployed instance's own database (`X-Admin-Key: <SECRET_KEY>`) |
+| `POST` | `/admin/seed` | Seed a deployed instance's own database (`X-Admin-Key: <SECRET_KEY>`; add `?force=true` to wipe and fully re-seed if a prior run was interrupted) |
 
 Full interactive docs: `/docs` on whichever host you're running (local or the live API above).
 
@@ -287,7 +289,7 @@ Created by `scripts/seed_db.py` (or `POST /admin/seed` on a deployed instance wi
 
 ### Backend — pytest
 
-94 tests, 89% overall coverage, 100% on the decision engine (`app/engine.py`). Runs fully offline against an in-memory database with the LLM and Razorpay calls disabled, so it never depends on external quota or network access.
+100 tests, 89%+ overall coverage, 100% on the decision engine (`app/engine.py`). Runs fully offline against an in-memory database with the LLM and Razorpay calls disabled, so it never depends on external quota or network access.
 
 ```powershell
 cd backend
@@ -307,7 +309,7 @@ npx playwright install chromium
 npm run e2e
 ```
 
-Requires the backend and frontend dev servers running locally (or set `E2E_BASE_URL` / `E2E_API_URL` to point elsewhere).
+Requires the backend and frontend dev servers running locally (or set `E2E_BASE_URL` / `E2E_API_URL` to point elsewhere — the full suite also passes against the live Vercel + Render deployment linked above).
 
 ---
 
