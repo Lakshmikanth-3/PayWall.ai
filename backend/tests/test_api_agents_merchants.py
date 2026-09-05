@@ -72,3 +72,37 @@ def test_block_merchant(client):
     r = client.patch(f"/merchants/{created['id']}/block")
     assert r.status_code == 200
     assert client.get(f"/merchants/{created['id']}").json()["is_blocked"] is True
+
+
+def test_delete_agent_removes_it_and_its_transactions(client):
+    agent = client.post("/agents", json={
+        "name": "Throwaway Agent", "max_transaction": 1000, "daily_limit": 2000,
+        "allowed_categories": ["electronics"],
+    }).json()
+    merchant = client.post("/merchants", json={"name": "M", "category": "electronics", "risk_score": 8}).json()
+    txn = client.post("/transactions/evaluate", json={
+        "agent_id": agent["id"], "amount": 100, "currency": "INR", "merchant_id": merchant["id"],
+        "category": "electronics", "product": "Cable", "user_intent": "Buy cable electronics today",
+    }).json()
+
+    r = client.delete(f"/agents/{agent['id']}")
+    assert r.status_code == 200
+    assert r.json()["transactions_removed"] == 1
+
+    assert client.get(f"/agents/{agent['id']}").status_code == 404
+    assert client.get(f"/transactions/{txn['transaction_id']}").status_code == 404
+
+
+def test_delete_agent_404(client):
+    assert client.delete("/agents/AGT-NOPE").status_code == 404
+
+
+def test_delete_merchant(client):
+    created = client.post("/merchants", json={"name": "Throwaway Merchant", "category": "x", "risk_score": 20}).json()
+    r = client.delete(f"/merchants/{created['id']}")
+    assert r.status_code == 200
+    assert client.get(f"/merchants/{created['id']}").status_code == 404
+
+
+def test_delete_merchant_404(client):
+    assert client.delete("/merchants/MER-NOPE").status_code == 404

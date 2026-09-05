@@ -40,6 +40,26 @@ def get_agent(agent_id: str, db: Session = Depends(get_db)):
     return agent
 
 
+@router.delete("/{agent_id}")
+def delete_agent(agent_id: str, db: Session = Depends(get_db)):
+    """
+    Permanently removes an agent and its transaction/audit history. Intended
+    for cleaning up test/throwaway agents (e.g. ones created by the E2E
+    suite) — real agents should normally be suspended (PATCH .../suspend),
+    not deleted, so their audit trail survives.
+    """
+    agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    txn_ids = [t.id for t in db.query(models.Transaction.id).filter(models.Transaction.agent_id == agent_id).all()]
+    if txn_ids:
+        db.query(models.AuditLog).filter(models.AuditLog.transaction_id.in_(txn_ids)).delete(synchronize_session=False)
+        db.query(models.Transaction).filter(models.Transaction.id.in_(txn_ids)).delete(synchronize_session=False)
+    db.delete(agent)
+    db.commit()
+    return {"message": f"Agent {agent_id} deleted", "transactions_removed": len(txn_ids)}
+
+
 @router.patch("/{agent_id}/suspend")
 def suspend_agent(agent_id: str, db: Session = Depends(get_db)):
     agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()

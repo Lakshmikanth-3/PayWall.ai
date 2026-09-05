@@ -48,6 +48,22 @@ def get_merchant(merchant_id: str, db: Session = Depends(get_db)):
     return m
 
 
+@router.delete("/{merchant_id}")
+def delete_merchant(merchant_id: str, db: Session = Depends(get_db)):
+    """
+    Permanently removes a merchant. Intended for cleaning up test/throwaway
+    merchants — real merchants should normally be blocked (PATCH .../block),
+    not deleted. Existing transactions keep their denormalized merchant_name
+    and aren't affected, since they don't hold a live foreign key to this row.
+    """
+    merchant = db.query(models.Merchant).filter(models.Merchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+    db.delete(merchant)
+    db.commit()
+    return {"message": f"Merchant {merchant_id} deleted"}
+
+
 @router.patch("/{merchant_id}/block")
 def block_merchant(merchant_id: str, db: Session = Depends(get_db)):
     m = db.query(models.Merchant).filter(models.Merchant.id == merchant_id).first()
