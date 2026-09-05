@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
+import { AnimatePresence } from "framer-motion";
+import { motion, stagger, fadeUp } from "@/components/motion";
 import { fetchAgents, fetchMerchants, evaluateTransaction, fetchLlmStatus, toggleLlm, proposeUpsell } from "@/lib/api";
 import DecisionBadge from "@/components/DecisionBadge";
 import RiskMeter from "@/components/RiskMeter";
@@ -194,15 +196,15 @@ export default function EvaluatePage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">Agent</label>
-              <select value={form.agent_id} onChange={e => setForm({...form, agent_id: e.target.value})} className={inputClass}>
+              <label htmlFor="field-agent" className="text-xs text-slate-400 mb-1 block">Agent</label>
+              <select id="field-agent" value={form.agent_id} onChange={e => setForm({...form, agent_id: e.target.value})} className={inputClass}>
                 {agents.map(a => <option key={a.id} value={a.id} className="bg-slate-900">{a.name}</option>)}
                 <option value="AGT-001" className="bg-slate-900">Shopping Assistant</option>
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">Merchant</label>
-              <select value={form.merchant_id} onChange={e => setForm({...form, merchant_id: e.target.value})} className={inputClass}>
+              <label htmlFor="field-merchant" className="text-xs text-slate-400 mb-1 block">Merchant</label>
+              <select id="field-merchant" value={form.merchant_id} onChange={e => setForm({...form, merchant_id: e.target.value})} className={inputClass}>
                 {merchants.map(m => <option key={m.id} value={m.id} className="bg-slate-900">{m.name}</option>)}
               </select>
             </div>
@@ -210,23 +212,24 @@ export default function EvaluatePage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">Amount (₹)</label>
-              <input type="number" value={form.amount} onChange={e => setForm({...form, amount: Number(e.target.value)})} className={inputClass} min={1} required />
+              <label htmlFor="field-amount" className="text-xs text-slate-400 mb-1 block">Amount (₹)</label>
+              <input id="field-amount" type="number" value={form.amount} onChange={e => setForm({...form, amount: Number(e.target.value)})} className={inputClass} min={1} required />
             </div>
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">Category</label>
-              <input value={form.category} onChange={e => setForm({...form, category: e.target.value})} className={inputClass} required />
+              <label htmlFor="field-category" className="text-xs text-slate-400 mb-1 block">Category</label>
+              <input id="field-category" value={form.category} onChange={e => setForm({...form, category: e.target.value})} className={inputClass} required />
             </div>
           </div>
 
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Product Description</label>
-            <input value={form.product} onChange={e => setForm({...form, product: e.target.value})} className={inputClass} required />
+            <label htmlFor="field-product" className="text-xs text-slate-400 mb-1 block">Product Description</label>
+            <input id="field-product" value={form.product} onChange={e => setForm({...form, product: e.target.value})} className={inputClass} required />
           </div>
 
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">User&apos;s Original Intent</label>
+            <label htmlFor="field-intent" className="text-xs text-slate-400 mb-1 block">User&apos;s Original Intent</label>
             <textarea
+              id="field-intent"
               value={form.user_intent}
               onChange={e => setForm({...form, user_intent: e.target.value})}
               rows={2}
@@ -253,8 +256,16 @@ export default function EvaluatePage() {
 
         {/* Result */}
         <div className="space-y-4">
+        <AnimatePresence mode="wait">
           {result ? (
-            <>
+            <motion.div
+              key={result.transaction_id}
+              initial={{ opacity: 0, scale: 0.97, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="space-y-4"
+            >
               {/* Decision card */}
               <div className={`glass p-6 rounded-2xl border-2 ${
                 result.decision === "ALLOW" ? "border-emerald-500/30 glow-green" :
@@ -332,9 +343,14 @@ export default function EvaluatePage() {
               {/* Policy checks */}
               <div className="glass p-5 rounded-2xl">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Policy Checks</p>
-                <div className="space-y-2">
+                <motion.div
+                  className="space-y-2"
+                  initial="hidden"
+                  animate="show"
+                  variants={stagger(0.06)}
+                >
                   {result.policy_checks.map((c, i) => (
-                    <div key={i} className="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-white/3">
+                    <motion.div key={i} variants={fadeUp} className="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-white/3">
                       {c.passed
                         ? <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                         : <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
@@ -343,20 +359,27 @@ export default function EvaluatePage() {
                         <p className={`text-xs font-medium ${c.passed ? "text-slate-200" : "text-red-300"}`}>{c.check}</p>
                         <p className="text-xs text-slate-500">{c.detail}</p>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
-                </div>
+                </motion.div>
               </div>
-            </>
+            </motion.div>
           ) : (
-            <div className="glass p-8 rounded-2xl flex items-center justify-center h-full">
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="glass p-8 rounded-2xl flex items-center justify-center h-full"
+            >
               <div className="text-center">
                 <ShieldCheck className="w-12 h-12 text-slate-600 mx-auto mb-3" />
                 <p className="text-slate-400 text-sm">Select a scenario or fill the form</p>
                 <p className="text-slate-600 text-xs mt-1">Results will appear here</p>
               </div>
-            </div>
+            </motion.div>
           )}
+        </AnimatePresence>
         </div>
       </div>
     </div>

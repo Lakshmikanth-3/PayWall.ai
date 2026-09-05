@@ -16,14 +16,14 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/live", label: "Live Feed", icon: Zap },
-  { href: "/evaluate", label: "Evaluate", icon: FlaskConical },
-  { href: "/audit", label: "Audit Trail", icon: Search },
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/merchants", label: "Merchants", icon: Store },
-  { href: "/metrics", label: "Metrics", icon: BarChart3 },
-  { href: "/simulate", label: "Policy Simulator", icon: Sliders },
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/live", label: "Live Feed", icon: Zap },
+  { href: "/dashboard/evaluate", label: "Evaluate", icon: FlaskConical },
+  { href: "/dashboard/audit", label: "Audit Trail", icon: Search },
+  { href: "/dashboard/agents", label: "Agents", icon: Bot },
+  { href: "/dashboard/merchants", label: "Merchants", icon: Store },
+  { href: "/dashboard/metrics", label: "Metrics", icon: BarChart3 },
+  { href: "/dashboard/simulate", label: "Policy Simulator", icon: Sliders },
 ];
 
 export default function Sidebar() {
@@ -32,7 +32,7 @@ export default function Sidebar() {
   return (
     <aside className="w-64 h-screen bg-[#0c1220] border-r border-white/5 flex flex-col shrink-0">
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-white/5">
+      <Link href="/" className="px-6 py-5 border-b border-white/5 block hover:bg-white/3 transition-colors">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg shadow-violet-500/20">
             <ShieldCheck className="w-5 h-5 text-white" />
@@ -42,7 +42,7 @@ export default function Sidebar() {
             <p className="text-xs text-violet-400 font-medium">Guard</p>
           </div>
         </div>
-      </div>
+      </Link>
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

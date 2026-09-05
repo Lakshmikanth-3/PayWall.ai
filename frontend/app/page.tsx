@@ -1,281 +1,339 @@
 "use client";
 import { useEffect, useState } from "react";
-import { fetchStats, fetchMetrics, fetchLive, fetchRevenueImpact } from "@/lib/api";
-import { formatLargeNumber, riskColor, timeAgo } from "@/lib/utils";
+import Link from "next/link";
+import { AnimatePresence } from "framer-motion";
+import {
+  ShieldCheck, ArrowRight, Code2, ScanSearch, BrainCircuit, Gavel,
+  Sparkles, TrendingUp, Ban, GitBranch, CheckCircle2, XCircle, ArrowDown,
+} from "lucide-react";
+import { motion, Reveal, StaggerGroup, fadeUp, stagger } from "@/components/motion";
 import DecisionBadge from "@/components/DecisionBadge";
 import RiskMeter from "@/components/RiskMeter";
-import {
-  ShieldCheck, TrendingUp, AlertTriangle, DollarSign,
-  Activity, Clock, Zap, BarChart2, Sparkles, ShieldAlert
-} from "lucide-react";
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell
-} from "recharts";
 
-interface Stats {
-  total_evaluated: number; total_allowed: number;
-  total_reviewed: number; total_blocked: number;
-  money_protected: number; total_gmv: number;
-  avg_risk_score: number; p50_latency: number; p95_latency: number;
-}
+const GITHUB_URL = "https://github.com/Lakshmikanth-3/PayWall.ai";
 
-interface Metrics {
-  precision: number; recall: number; f1: number; roc_auc: number;
-  protection_rate: number;
-}
+const LIVE_EXAMPLES = [
+  {
+    product: "Nike Running Shoes", amount: "4,799", decision: "ALLOW", risk: 4,
+    reason: "Matches user intent, within budget, low-risk merchant.",
+  },
+  {
+    product: "Premium Protection Plan", amount: "14,999", decision: "BLOCK", risk: 96,
+    reason: "Unrelated to user intent, exceeds authorized limit.",
+  },
+  {
+    product: "Moisture-wicking Running Socks", amount: "149", decision: "ALLOW", risk: 3,
+    reason: "Relevant upsell, fits remaining budget, same Guard pipeline.",
+  },
+  {
+    product: "Monthly Grocery Pack", amount: "3,500", decision: "REVIEW", risk: 52,
+    reason: "Medium-risk merchant — routed to human approval.",
+  },
+];
 
-interface LiveTxn {
-  id: string; amount: number; decision: string;
-  risk_score: number; merchant_name: string; product: string;
-  created_at: string;
-}
-
-interface RevenueImpact {
-  upsells_proposed: number; upsells_allowed: number;
-  upsells_blocked: number; upsells_review: number;
-  incremental_gmv: number; upsell_acceptance_rate: number;
-  manipulative_exposure_blocked: number;
-}
-
-const PIE_COLORS = { ALLOW: "#10b981", REVIEW: "#f59e0b", BLOCK: "#ef4444" };
-
-export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [live, setLive] = useState<LiveTxn[]>([]);
-  const [revenue, setRevenue] = useState<RevenueImpact | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = async () => {
-    try {
-      const [s, m, l, r] = await Promise.all([fetchStats(), fetchMetrics(), fetchLive(8), fetchRevenueImpact()]);
-      setStats(s); setMetrics(m); setLive(l); setRevenue(r);
-    } catch {/* backend may be offline */}
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); const t = setInterval(load, 8000); return () => clearInterval(t); }, []);
-
-  const pieData = stats ? [
-    { name: "ALLOW", value: stats.total_allowed },
-    { name: "REVIEW", value: stats.total_reviewed },
-    { name: "BLOCK", value: stats.total_blocked },
-  ] : [];
-
-  const StatCard = ({ icon: Icon, label, value, sub, color = "violet" }: {
-    icon: React.ElementType; label: string; value: string | number; sub?: string; color?: string;
-  }) => {
-    const colorMap: Record<string, string> = {
-      violet: "from-violet-500/20 to-purple-500/10 border-violet-500/20",
-      green: "from-emerald-500/20 to-teal-500/10 border-emerald-500/20",
-      amber: "from-amber-500/20 to-orange-500/10 border-amber-500/20",
-      red: "from-red-500/20 to-rose-500/10 border-red-500/20",
-      blue: "from-blue-500/20 to-cyan-500/10 border-blue-500/20",
-    };
-    const iconMap: Record<string, string> = {
-      violet: "text-violet-400", green: "text-emerald-400",
-      amber: "text-amber-400", red: "text-red-400", blue: "text-blue-400",
-    };
-    return (
-      <div className={`glass bg-gradient-to-br ${colorMap[color]} p-5 rounded-2xl`}>
-        <div className="flex items-start justify-between mb-3">
-          <div className={`p-2 rounded-xl bg-white/5`}>
-            <Icon className={`w-5 h-5 ${iconMap[color]}`} />
-          </div>
-        </div>
-        <p className="text-2xl font-bold text-white mb-0.5">{value}</p>
-        <p className="text-sm font-medium text-slate-300">{label}</p>
-        {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
-      </div>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-12 h-12 border-2 border-violet-500/40 border-t-violet-500 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-400">Loading dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+function LiveDecisionCard() {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIndex((i) => (i + 1) % LIVE_EXAMPLES.length), 3200);
+    return () => clearInterval(t);
+  }, []);
+  const ex = LIVE_EXAMPLES[index];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Command Center</h1>
-          <p className="text-slate-400 text-sm mt-0.5">PayWall.ai — Real-time AI agent payment oversight</p>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs font-medium text-emerald-400">Guard Active</span>
+    <div className="glass w-full max-w-md rounded-2xl p-6 relative overflow-hidden">
+      <div className="flex items-center justify-between mb-5">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Guard Decision</p>
+        <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Live simulation
         </div>
       </div>
-
-      {/* Merchant Revenue Impact — PRD Section 17.A */}
-      <div className="glass p-5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent border-emerald-500/15">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <h2 className="text-sm font-semibold text-white">Merchant Revenue Impact</h2>
-          </div>
-          <p className="text-xs text-slate-500">Upsell Agent — same Guard pipeline, real incremental GMV</p>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="bg-white/3 rounded-xl p-3">
-            <p className="text-xs text-slate-400">Upsells Proposed</p>
-            <p className="text-xl font-bold text-white">{revenue?.upsells_proposed?.toLocaleString() ?? "—"}</p>
-          </div>
-          <div className="bg-white/3 rounded-xl p-3">
-            <p className="text-xs text-slate-400">Allowed</p>
-            <p className="text-xl font-bold text-emerald-400">{revenue?.upsells_allowed?.toLocaleString() ?? "—"}</p>
-          </div>
-          <div className="bg-white/3 rounded-xl p-3">
-            <p className="text-xs text-slate-400">Blocked (manipulative)</p>
-            <p className="text-xl font-bold text-red-400">{revenue?.upsells_blocked?.toLocaleString() ?? "—"}</p>
-          </div>
-          <div className="bg-white/3 rounded-xl p-3">
-            <p className="text-xs text-slate-400">Sent to Review</p>
-            <p className="text-xl font-bold text-amber-400">{revenue?.upsells_review?.toLocaleString() ?? "—"}</p>
-          </div>
-          <div className="bg-white/3 rounded-xl p-3">
-            <p className="text-xs text-slate-400">Acceptance Rate</p>
-            <p className="text-xl font-bold text-white">{revenue ? `${(revenue.upsell_acceptance_rate * 100).toFixed(0)}%` : "—"}</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/8 border border-emerald-500/20">
-            <TrendingUp className="w-5 h-5 text-emerald-400 shrink-0" />
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={index}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        >
+          <div className="flex items-start justify-between mb-4">
             <div>
-              <p className="text-xs text-slate-400">Incremental GMV from Upsells</p>
-              <p className="text-lg font-bold text-emerald-300">{formatLargeNumber(revenue?.incremental_gmv ?? 0)}</p>
+              <p className="text-xs text-slate-500 mb-1">Payment request</p>
+              <p className="text-sm font-semibold text-white">{ex.product}</p>
+              <p className="text-lg font-bold text-white mt-1">₹{ex.amount}</p>
             </div>
+            <RiskMeter score={ex.risk} size="md" showLabel={false} />
           </div>
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/8 border border-red-500/20">
-            <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" />
-            <div>
-              <p className="text-xs text-slate-400">Manipulative-Upsell Exposure Blocked</p>
-              <p className="text-lg font-bold text-red-300">{formatLargeNumber(revenue?.manipulative_exposure_blocked ?? 0)}</p>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-slate-500">Decision</span>
+            <DecisionBadge decision={ex.decision} />
+          </div>
+          <div className="bg-white/4 rounded-xl p-3">
+            <p className="text-xs text-slate-400 leading-relaxed">{ex.reason}</p>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+const LAYERS = [
+  {
+    icon: Gavel,
+    title: "Hard Policy Rules",
+    desc: "Deterministic checks — agent status, merchant blocklist, transaction and daily limits, category authorization. Any violation blocks outright, no ML or LLM required.",
+  },
+  {
+    icon: ScanSearch,
+    title: "ML Risk Model",
+    desc: "An XGBoost classifier scores every transaction 0–100 on amount deviation, merchant risk, velocity, and budget headroom.",
+  },
+  {
+    icon: BrainCircuit,
+    title: "LLM Intent Match",
+    desc: "Compares what's being paid for against what the user actually asked for. Falls back to a deterministic scorer and fails closed to REVIEW if the LLM is unavailable — never guesses.",
+  },
+];
+
+const FLOW_STEPS = [
+  { label: "User states intent", detail: "“Buy running shoes under ₹5,000”" },
+  { label: "Agent proposes a payment", detail: "POST /transactions/evaluate" },
+  { label: "Guard decides", detail: "Policy → Risk → Intent, combined" },
+  { label: "Razorpay executes", detail: "Only after ALLOW, or REVIEW + human approval" },
+];
+
+export default function LandingPage() {
+  return (
+    <div className="min-h-screen bg-[#080c14] text-white overflow-x-hidden">
+      {/* Nav */}
+      <nav className="sticky top-0 z-50 backdrop-blur-xl bg-[#080c14]/70 border-b border-white/5">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center">
+              <ShieldCheck className="w-4 h-4 text-white" />
             </div>
+            <span className="text-sm font-bold tracking-tight">Agent Commerce Guard</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors px-3 py-2"
+            >
+              <Code2 className="w-3.5 h-3.5" /> Source
+            </a>
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 text-xs font-semibold bg-white text-[#080c14] px-4 py-2 rounded-xl hover:bg-slate-200 transition-colors"
+            >
+              Launch Dashboard <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </div>
-      </div>
+      </nav>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={ShieldCheck} label="Evaluated" value={stats?.total_evaluated?.toLocaleString() ?? "—"} sub="Total transactions" color="violet" />
-        <StatCard icon={TrendingUp} label="Allowed" value={stats?.total_allowed?.toLocaleString() ?? "—"} sub={`${stats ? ((stats.total_allowed / (stats.total_evaluated || 1)) * 100).toFixed(1) : 0}% approval rate`} color="green" />
-        <StatCard icon={AlertTriangle} label="Blocked" value={stats?.total_blocked?.toLocaleString() ?? "—"} sub={`${stats ? ((stats.total_blocked / (stats.total_evaluated || 1)) * 100).toFixed(1) : 0}% block rate`} color="red" />
-        <StatCard icon={DollarSign} label="Protected" value={formatLargeNumber(stats?.money_protected ?? 0)} sub="Risky GMV stopped" color="amber" />
-      </div>
+      {/* Hero */}
+      <section className="relative max-w-6xl mx-auto px-6 pt-20 pb-28">
+        <div
+          className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[900px] rounded-full opacity-20 blur-3xl"
+          style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)" }}
+        />
+        <div className="grid lg:grid-cols-2 gap-16 items-center relative">
+          <motion.div initial="hidden" animate="show" variants={stagger(0.12)}>
+            <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/25 text-violet-300 text-xs font-medium mb-6">
+              <Sparkles className="w-3.5 h-3.5" />
+              Razorpay AI Buildathon — Track 01: AI Growth &amp; Agentic Commerce
+            </motion.div>
+            <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.1] mb-6">
+              The trust layer that lets{" "}
+              <span className="gradient-text">AI agents</span>{" "}
+              spend money safely.
+            </motion.h1>
+            <motion.p variants={fadeUp} className="text-slate-400 text-lg leading-relaxed mb-8 max-w-lg">
+              An agent that can complete a purchase can also be manipulated into
+              paying for something the user never asked for. Agent Commerce
+              Guard authorizes every agent-initiated payment against the
+              user&apos;s intent, policy, and risk — before it ever reaches Razorpay.
+            </motion.p>
+            <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-400 hover:to-purple-500 text-white font-semibold text-sm px-5 py-3 rounded-xl shadow-lg shadow-violet-500/25 transition-all"
+              >
+                Launch Dashboard <ArrowRight className="w-4 h-4" />
+              </Link>
+              <a
+                href="#how-it-works"
+                className="flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white px-5 py-3 transition-colors"
+              >
+                See how it decides <ArrowDown className="w-3.5 h-3.5" />
+              </a>
+            </motion.div>
+          </motion.div>
 
-      {/* Secondary stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={BarChart2} label="Avg Risk Score" value={`${stats?.avg_risk_score?.toFixed(1) ?? "—"}/100`} color="blue" />
-        <StatCard icon={Activity} label="In Review" value={stats?.total_reviewed?.toLocaleString() ?? "—"} sub="Awaiting human" color="amber" />
-        <StatCard icon={Clock} label="P50 Latency" value={`${stats?.p50_latency?.toFixed(0) ?? "—"}ms`} sub="Median decision time" color="violet" />
-        <StatCard icon={Zap} label="P95 Latency" value={`${stats?.p95_latency?.toFixed(0) ?? "—"}ms`} sub="95th percentile" color="blue" />
-      </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="flex justify-center lg:justify-end"
+          >
+            <LiveDecisionCard />
+          </motion.div>
+        </div>
+      </section>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Decision Pie */}
-        <div className="glass p-5 rounded-2xl">
-          <h2 className="text-sm font-semibold text-white mb-4">Decision Distribution</h2>
-          {pieData.some(d => d.value > 0) ? (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width={140} height={140}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={3} dataKey="value">
-                    {pieData.map((entry) => (
-                      <Cell key={entry.name} fill={PIE_COLORS[entry.name as keyof typeof PIE_COLORS]} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-2">
-                {pieData.map(d => (
-                  <div key={d.name} className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[d.name as keyof typeof PIE_COLORS] }} />
-                    <span className="text-xs text-slate-300">{d.name}</span>
-                    <span className="text-xs font-bold text-white ml-auto">{d.value}</span>
-                  </div>
-                ))}
+      {/* Problem statement */}
+      <section className="max-w-6xl mx-auto px-6 py-20 border-t border-white/5">
+        <Reveal className="max-w-2xl">
+          <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">The problem</p>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-6">
+            Traditional fraud detection asks the wrong question.
+          </h2>
+        </Reveal>
+        <div className="grid md:grid-cols-2 gap-6 mt-10">
+          <Reveal delay={0.05} className="glass p-6 rounded-2xl border-white/5">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Traditional fraud detection</p>
+            <p className="text-lg text-slate-300 leading-relaxed">&ldquo;Is this transaction fraudulent?&rdquo;</p>
+          </Reveal>
+          <Reveal delay={0.15} className="glass p-6 rounded-2xl border-violet-500/25 glow-blue">
+            <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">Agent Commerce Guard</p>
+            <p className="text-lg text-white leading-relaxed">
+              &ldquo;Is this transaction authorized, consistent with the user&apos;s
+              intent, within policy, and safe to execute?&rdquo;
+            </p>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* Three layers */}
+      <section id="how-it-works" className="max-w-6xl mx-auto px-6 py-20 border-t border-white/5">
+        <Reveal className="max-w-2xl mb-12">
+          <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">How it decides</p>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            Three layers, one bounded decision.
+          </h2>
+        </Reveal>
+        <StaggerGroup className="grid md:grid-cols-3 gap-6">
+          {LAYERS.map((layer, i) => (
+            <motion.div key={layer.title} variants={fadeUp} className="glass p-6 rounded-2xl relative">
+              <div className="w-10 h-10 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center mb-4">
+                <layer.icon className="w-5 h-5 text-violet-400" />
               </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
-              No transactions yet
-            </div>
-          )}
-        </div>
+              <p className="text-xs font-mono text-slate-600 mb-1">Layer {i + 1}</p>
+              <h3 className="text-base font-semibold text-white mb-2">{layer.title}</h3>
+              <p className="text-sm text-slate-400 leading-relaxed">{layer.desc}</p>
+            </motion.div>
+          ))}
+        </StaggerGroup>
 
-        {/* ML Metrics */}
-        {metrics && (
-          <div className="glass p-5 rounded-2xl lg:col-span-2">
-            <h2 className="text-sm font-semibold text-white mb-4">ML Performance Metrics</h2>
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: "Precision", value: metrics.precision, color: "#10b981" },
-                { label: "Recall", value: metrics.recall, color: "#6366f1" },
-                { label: "F1 Score", value: metrics.f1, color: "#8b5cf6" },
-                { label: "ROC-AUC", value: metrics.roc_auc, color: "#f59e0b" },
-              ].map(m => (
-                <div key={m.label} className="bg-white/3 rounded-xl p-3">
-                  <p className="text-xs text-slate-400 mb-1">{m.label}</p>
-                  <p className="text-xl font-bold" style={{ color: m.color }}>
-                    {(m.value * 100).toFixed(1)}%
-                  </p>
-                  <div className="mt-2 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${m.value * 100}%`, background: m.color }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+        <Reveal delay={0.1} className="mt-8 flex items-center justify-center gap-3">
+          {(["ALLOW", "REVIEW", "BLOCK"] as const).map((d) => (
+            <DecisionBadge key={d} decision={d} />
+          ))}
+        </Reveal>
+      </section>
 
-      {/* Live feed */}
-      <div className="glass p-5 rounded-2xl">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-white">Live Decisions</h2>
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-refreshing
-          </div>
+      {/* Revenue growth */}
+      <section className="max-w-6xl mx-auto px-6 py-20 border-t border-white/5">
+        <Reveal className="max-w-2xl mb-12">
+          <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-3">Revenue growth, not just safety</p>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            One pipeline. Two outcomes.
+          </h2>
+          <p className="text-slate-400 mt-4 leading-relaxed">
+            The Upsell Agent proposes one relevant, budget-aware add-on after
+            a purchase — and it has no special authority. Its proposal is
+            evaluated by the exact same Guard as any other payment.
+          </p>
+        </Reveal>
+        <div className="grid md:grid-cols-2 gap-6">
+          <Reveal delay={0.05} className="glass p-6 rounded-2xl border-emerald-500/20">
+            <div className="flex items-center gap-2 mb-4">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              <p className="text-sm font-semibold text-emerald-300">Legitimate upsell</p>
+            </div>
+            <p className="text-sm text-slate-300 mb-1">Running socks, ₹149 — offered after a shoe purchase</p>
+            <p className="text-xs text-slate-500 mb-4">Same category, within remaining budget, relevant to intent</p>
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs text-emerald-300 font-medium">ALLOW → counts as incremental GMV</span>
+            </div>
+          </Reveal>
+          <Reveal delay={0.15} className="glass p-6 rounded-2xl border-red-500/20">
+            <div className="flex items-center gap-2 mb-4">
+              <XCircle className="w-5 h-5 text-red-400" />
+              <p className="text-sm font-semibold text-red-300">Manipulated &ldquo;upsell&rdquo;</p>
+            </div>
+            <p className="text-sm text-slate-300 mb-1">Protection plan, ₹14,999 — disguised as a checkout add-on</p>
+            <p className="text-xs text-slate-500 mb-4">Unrelated category, exceeds authorization, low intent match</p>
+            <div className="flex items-center gap-2">
+              <Ban className="w-4 h-4 text-red-400" />
+              <span className="text-xs text-red-300 font-medium">BLOCK → exposure prevented</span>
+            </div>
+          </Reveal>
         </div>
-        {live.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-8">No transactions yet. Use the Evaluate page to test scenarios.</p>
-        ) : (
-          <div className="space-y-2">
-            {live.map((t) => (
-              <div key={t.id} className="flex items-center gap-4 px-4 py-3 rounded-xl bg-white/3 hover:bg-white/5 transition-colors slide-in">
-                <RiskMeter score={t.risk_score ?? 50} size="sm" showLabel={false} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-slate-500">{t.id}</span>
-                    <span className="text-xs text-slate-300 truncate">{t.product}</span>
-                  </div>
-                  <p className="text-xs text-slate-500">{t.merchant_name}</p>
+      </section>
+
+      {/* Flow diagram */}
+      <section className="max-w-6xl mx-auto px-6 py-20 border-t border-white/5">
+        <Reveal className="max-w-2xl mb-12">
+          <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">Architecture</p>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            The agent proposes. The Guard authorizes.
+          </h2>
+        </Reveal>
+        <StaggerGroup delay={0.12} className="flex flex-col md:flex-row items-stretch gap-4">
+          {FLOW_STEPS.map((step, i) => (
+            <motion.div key={step.label} variants={fadeUp} className="flex-1 flex items-center gap-4">
+              <div className="glass p-5 rounded-2xl flex-1 h-full">
+                <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold text-violet-400 mb-3">
+                  {i + 1}
                 </div>
-                <span className="text-sm font-bold text-white whitespace-nowrap">
-                  ₹{t.amount?.toLocaleString("en-IN")}
-                </span>
-                <DecisionBadge decision={t.decision} size="sm" />
-                <span className="text-xs text-slate-600 whitespace-nowrap">
-                  {t.created_at ? timeAgo(t.created_at) : ""}
-                </span>
+                <p className="text-sm font-semibold text-white mb-1">{step.label}</p>
+                <p className="text-xs text-slate-500">{step.detail}</p>
               </div>
-            ))}
+              {i < FLOW_STEPS.length - 1 && (
+                <ArrowRight className="w-5 h-5 text-slate-700 shrink-0 hidden md:block" />
+              )}
+            </motion.div>
+          ))}
+        </StaggerGroup>
+      </section>
+
+      {/* CTA footer */}
+      <section className="max-w-6xl mx-auto px-6 py-24 border-t border-white/5 text-center">
+        <Reveal>
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center mx-auto mb-6">
+            <GitBranch className="w-6 h-6 text-white" />
           </div>
-        )}
-      </div>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-4">
+            Let AI agents transact.<br />Don&apos;t let them transact beyond what the user authorized.
+          </h2>
+          <div className="flex items-center justify-center gap-4 mt-8">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2 bg-white text-[#080c14] font-semibold text-sm px-6 py-3 rounded-xl hover:bg-slate-200 transition-colors"
+            >
+              Launch Dashboard <ArrowRight className="w-4 h-4" />
+            </Link>
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-white px-6 py-3 border border-white/10 rounded-xl transition-colors"
+            >
+              <Code2 className="w-4 h-4" /> View Source
+            </a>
+          </div>
+        </Reveal>
+      </section>
+
+      <footer className="border-t border-white/5 py-8">
+        <p className="text-center text-xs text-slate-600">
+          Agent Commerce Guard — Razorpay AI Buildathon 2026
+        </p>
+      </footer>
     </div>
   );
 }
