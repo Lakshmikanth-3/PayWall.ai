@@ -37,3 +37,34 @@ def test_seed_is_idempotent(client):
     # Re-running must not duplicate agents/merchants.
     assert len(client.get("/agents").json()) == 3
     assert len(client.get("/merchants").json()) == 10
+
+
+def test_seed_force_wipes_transactions_and_reseeds_fully(client):
+    """
+    force=true is the fix for a partial run — e.g. a slow free-tier instance
+    scoring 100+ transactions outlasting an HTTP client's timeout, leaving a
+    partial history that a plain retry won't top up since "any transaction
+    exists" is what the idempotency check looks for.
+    """
+    headers = {"X-Admin-Key": settings.SECRET_KEY}
+    client.post("/admin/seed", headers=headers)
+    before = len(client.get("/transactions?limit=1000").json())
+    assert before > 0
+
+    forced = client.post("/admin/seed", headers=headers, params={"force": "true"}).json()
+    assert forced["transactions_seeded"] != "already present"
+    assert forced["upsell_transactions_seeded"] != "already present"
+
+    # force=true must not touch agents/merchants, only transactions/audit logs.
+    assert len(client.get("/agents").json()) == 3
+    assert len(client.get("/merchants").json()) == 10
+    after = len(client.get("/transactions?limit=1000").json())
+    assert after == before  # deterministic history generation (fixed random.seed)
+
+
+def test_seed_force_resets_agent_daily_spent(client):
+    headers = {"X-Admin-Key": settings.SECRET_KEY}
+    client.post("/admin/seed", headers=headers)
+    client.post("/admin/seed", headers=headers, params={"force": "true"})
+    for agent in client.get("/agents").json():
+        assert agent["daily_spent"] >= 0
