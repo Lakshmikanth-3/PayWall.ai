@@ -145,7 +145,14 @@ test.describe("Evaluate page — Guard decisions", () => {
   });
 
   test("toggling AI reasoning off shows the fail-closed indicator", async ({ page }) => {
+    // Don't assume a starting state — on a shared/live backend, a previous
+    // run (or a person poking at the demo) may have left the LLM toggled
+    // off already. Read the current state and assert the flip in whichever
+    // direction that implies, then always leave it back on "online".
+    await withLlmDisabled(page, async () => {}); // normalizes to enabled first
     await page.goto("/dashboard/evaluate");
+    await expect(page.getByText(/ai reasoning: online/i)).toBeVisible();
+
     const toggle = page.getByRole("button", { name: /ai reasoning/i });
     await toggle.click();
     await expect(page.getByText(/ai reasoning: disabled/i)).toBeVisible();
