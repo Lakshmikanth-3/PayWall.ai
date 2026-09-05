@@ -1,3 +1,9 @@
+databases:
+  - name: paywall-ai-db
+    plan: free
+    databaseName: paywall_ai
+    user: paywall_ai
+
 services:
   - type: web
     name: paywall-ai-backend
@@ -9,8 +15,14 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
+      # Render's free web services have an EPHEMERAL filesystem — a local
+      # sqlite file gets wiped on every restart/spin-down. Use the Postgres
+      # instance above instead, which persists independently of the web
+      # service's lifecycle.
       - key: DATABASE_URL
-        value: sqlite:///./agent_guard.db
+        fromDatabase:
+          name: paywall-ai-db
+          property: connectionString
       - key: ALLOW_ORIGINS
         value: https://paywall-ai-orcin.vercel.app
       - key: GROQ_API_KEY
