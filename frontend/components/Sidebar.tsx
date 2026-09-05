@@ -38,8 +38,8 @@ export default function Sidebar() {
             <ShieldCheck className="w-5 h-5 text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold text-white leading-tight">Agent Commerce</p>
-            <p className="text-xs text-violet-400 font-medium">Guard</p>
+            <p className="text-sm font-bold text-white leading-tight">PayWall</p>
+            <p className="text-xs text-violet-400 font-medium">.ai</p>
           </div>
         </div>
       </Link>

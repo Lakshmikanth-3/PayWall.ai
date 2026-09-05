@@ -112,8 +112,8 @@ export default function DashboardPage() {
       {/* Header */}
       <Reveal className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Command Center</h1>
-          <p className="text-slate-400 text-sm mt-0.5">PayWall.ai — Real-time AI agent payment oversight</p>
+          <h1 className="text-2xl font-bold text-white">PayWall.ai</h1>
+          <p className="text-slate-400 text-sm mt-0.5">Real-time AI agent payment oversight</p>
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

@@ -112,7 +112,7 @@ export default function LandingPage() {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center">
               <ShieldCheck className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-bold tracking-tight">Agent Commerce Guard</span>
+            <span className="text-sm font-bold tracking-tight">PayWall.ai</span>
           </div>
           <div className="flex items-center gap-3">
             <a
@@ -152,8 +152,8 @@ export default function LandingPage() {
             </motion.h1>
             <motion.p variants={fadeUp} className="text-slate-400 text-lg leading-relaxed mb-8 max-w-lg">
               An agent that can complete a purchase can also be manipulated into
-              paying for something the user never asked for. Agent Commerce
-              Guard authorizes every agent-initiated payment against the
+              paying for something the user never asked for. PayWall.ai
+              authorizes every agent-initiated payment against the
               user&apos;s intent, policy, and risk — before it ever reaches Razorpay.
             </motion.p>
             <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-4">
@@ -197,7 +197,7 @@ export default function LandingPage() {
             <p className="text-lg text-slate-300 leading-relaxed">&ldquo;Is this transaction fraudulent?&rdquo;</p>
           </Reveal>
           <Reveal delay={0.15} className="glass p-6 rounded-2xl border-violet-500/25 glow-blue">
-            <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">Agent Commerce Guard</p>
+            <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">PayWall.ai</p>
             <p className="text-lg text-white leading-relaxed">
               &ldquo;Is this transaction authorized, consistent with the user&apos;s
               intent, within policy, and safe to execute?&rdquo;
@@ -331,7 +331,7 @@ export default function LandingPage() {
 
       <footer className="border-t border-white/5 py-8">
         <p className="text-center text-xs text-slate-600">
-          Agent Commerce Guard — Razorpay AI Buildathon 2026
+          PayWall.ai — Razorpay AI Buildathon 2026
         </p>
       </footer>
     </div>

@@ -48,6 +48,24 @@ def test_suspend_and_activate_agent(client):
     assert client.get(f"/agents/{agent_id}").json()["status"] == "ACTIVE"
 
 
+def test_reset_daily_spend(client, db_session):
+    from app import models
+    created = client.post("/agents", json={"name": "A1", "max_transaction": 1000, "daily_limit": 2000}).json()
+    agent = db_session.query(models.Agent).filter(models.Agent.id == created["id"]).first()
+    agent.daily_spent = 1500
+    db_session.commit()
+
+    r = client.patch(f"/agents/{created['id']}/reset-daily-spend")
+    assert r.status_code == 200
+    assert r.json()["daily_spent"] == 0
+
+    assert client.get(f"/agents/{created['id']}").json()["daily_spent"] == 0
+
+
+def test_reset_daily_spend_404(client):
+    assert client.patch("/agents/AGT-NOPE/reset-daily-spend").status_code == 404
+
+
 def test_create_merchant(client):
     r = client.post("/merchants", json={
         "name": "Nike", "category": "sports", "risk_score": 8, "age_days": 3650,

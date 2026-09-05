@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "PayWall.ai | Agent Commerce Guard",
+  title: "PayWall.ai — AI Agent Payment Guard",
   description:
     "The authorization and safety layer between AI agents and Razorpay. Verify intent, enforce policy, detect risk, grow revenue.",
   keywords: ["AI payments", "agent commerce", "razorpay", "fraud detection", "autonomous agents"],

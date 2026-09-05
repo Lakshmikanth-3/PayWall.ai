@@ -80,6 +80,25 @@ def activate_agent(agent_id: str, db: Session = Depends(get_db)):
     return {"message": f"Agent {agent_id} activated"}
 
 
+@router.patch("/{agent_id}/reset-daily-spend", response_model=schemas.AgentResponse)
+def reset_daily_spend(agent_id: str, db: Session = Depends(get_db)):
+    """
+    Zeroes an agent's tracked daily spend without waiting for the natural
+    calendar-day reset (app.engine._reset_daily_spend_if_needed). Meant for
+    demo/recording prep on a shared instance — repeated manual testing
+    against the same agent consumes its real daily budget, so a scripted
+    "clean ALLOW" scenario can start failing on daily-budget grounds hours
+    later even though nothing about the transaction itself changed.
+    """
+    agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    agent.daily_spent = 0.0
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+
 @router.post("/{agent_id}/simulate-policy", response_model=schemas.PolicySimulationResponse)
 def simulate_agent_policy(
     agent_id: str,
