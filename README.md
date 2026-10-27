@@ -51,6 +51,8 @@ curl -X POST localhost:8000/agents -H "Content-Type: application/json" -d '{"nam
 curl -X POST localhost:8000/agent/shop -H "Content-Type: application/json" -d '{"agent_id":"<id>","user_intent":"Buy running shoes for my first marathon under 5000"}'
 ```
 
+H-MEM engine test: `python -m pytest tests/test_hmem_engine.py` (saves two decisions through the real engine and recalls the relevant one).
+
 `SAMPLE_MODE=true` runs the same flow with no Nightshift or Zetaris (labelled sample catalog and rules-based choice; H-MEM still runs locally on Node 22).
 
 ### Hackathon setup
