@@ -11,6 +11,10 @@ export interface ShoppingResult {
   intent_score: number;
   reasons: string[];
   transaction_id: string;
+  catalog_source?: string;
+  memories_recalled?: string[];
+  guard_retries?: number;
+  run_id?: string;
 }
 
 export async function runShoppingAgent(agent_id: string, user_intent: string): Promise<ShoppingResult> {

@@ -143,7 +143,7 @@ export default function LandingPage() {
           <motion.div initial="hidden" animate="show" variants={stagger(0.12)}>
             <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/25 text-violet-300 text-xs font-medium mb-6">
               <Sparkles className="w-3.5 h-3.5" />
-              Razorpay AI Buildathon — Track 01: AI Growth &amp; Agentic Commerce
+              Open Agent Hackathon 2026 — Track 3: Reasoning Architecture
             </motion.div>
             <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.1] mb-6">
               The trust layer that lets{" "}
@@ -156,6 +156,12 @@ export default function LandingPage() {
               authorizes every agent-initiated payment against the
               user&apos;s intent, policy, and risk — before it ever reaches Razorpay.
             </motion.p>
+            <motion.div variants={fadeUp} className="flex flex-wrap gap-2 mb-8 text-[11px] font-medium">
+              <span className="px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/25 text-sky-300">Zetaris data layer</span>
+              <span className="px-2.5 py-1 rounded-full bg-violet-500/10 border border-violet-500/25 text-violet-300">Meterless Nightshift</span>
+              <span className="px-2.5 py-1 rounded-full bg-fuchsia-500/10 border border-fuchsia-500/25 text-fuchsia-300">Meterless H-MEM memory</span>
+              <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300">NVIDIA Nemotron</span>
+            </motion.div>
             <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-4">
               <Link
                 href="/dashboard"
@@ -331,7 +337,7 @@ export default function LandingPage() {
 
       <footer className="border-t border-white/5 py-8">
         <p className="text-center text-xs text-slate-600">
-          PayWall.ai — Razorpay AI Buildathon 2026
+          PayWall.ai — Open Agent Hackathon 2026
         </p>
       </footer>
     </div>

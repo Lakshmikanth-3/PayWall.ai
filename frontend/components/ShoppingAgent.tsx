@@ -37,7 +37,7 @@ export default function ShoppingAgent() {
     <section aria-labelledby="shopping-agent-heading" className="glass p-5 rounded-2xl space-y-4">
       <div>
         <h2 id="shopping-agent-heading" className="text-lg font-semibold text-white">Shopping Agent</h2>
-        <p className="text-sm text-slate-400 mt-1">Your intent → agent proposal → Guard decision. Local demo catalog; no payment is executed here.</p>
+        <p className="text-sm text-slate-400 mt-1">Your intent → agent proposal → Guard decision. Catalog from Zetaris, memory from Meterless H-MEM, reasoning by Nemotron through Nightshift. No payment is executed here.</p>
       </div>
       <form onSubmit={run} className="flex flex-col sm:flex-row gap-3">
         <div className="text-xs text-slate-400 sm:w-48">
@@ -71,6 +71,13 @@ export default function ShoppingAgent() {
           <p className="text-slate-400">Merchant: {result.agent_proposal.merchant_id} · Risk: {result.risk_score.toFixed(1)}/100 · Intent: {(result.intent_score * 100).toFixed(0)}%</p>
           <ul className="list-disc pl-5 text-slate-300 space-y-1">{result.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul>
           <p className="text-xs text-slate-400 break-all">Agent model: {result.model} · Guard model: {result.guard_model}</p>
+          <p className="text-xs text-slate-400 break-all">Catalog: {result.catalog_source === 'zetaris' ? 'Zetaris (live SQL)' : 'labelled sample copy'} · Guard retries: {result.guard_retries ?? 0}{result.run_id ? ` · Trace: ${result.run_id}` : ''}</p>
+          {result.memories_recalled && result.memories_recalled.length > 0 && (
+            <div className="text-xs text-slate-400">
+              <p className="text-slate-300">Recalled from H-MEM:</p>
+              <ul className="list-disc pl-4">{result.memories_recalled.slice(0, 3).map((m, i) => <li key={i}>{m}</li>)}</ul>
+            </div>
+          )}
           <Link href="/dashboard/audit" className="inline-block text-xs text-violet-300 underline">Audit trail · {result.transaction_id}</Link>
         </div>}
       </div>

@@ -75,7 +75,7 @@ export default function Sidebar() {
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs text-emerald-400 font-medium">System Operational</span>
           </div>
-          <p className="text-xs text-slate-500">Razorpay Buildathon 2026</p>
+          <p className="text-xs text-slate-500">Open Agent Hackathon 2026</p>
         </div>
       </div>
     </aside>
