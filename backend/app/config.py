@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "paywall-ai-secret-key-2026-razorpay"
     OPENAI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
+    NVIDIA_API_KEY: str = ""
+    NVIDIA_MODEL: str = ""
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
     ALLOW_ORIGINS: str = "http://localhost:3000"

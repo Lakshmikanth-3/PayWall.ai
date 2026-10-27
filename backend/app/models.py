@@ -61,6 +61,10 @@ class Merchant(Base):
 class Transaction(Base):
     __tablename__ = "transactions"
 
+    @property
+    def model(self):
+        return (self.decision_detail or {}).get("model", "unknown")
+
     id = Column(String, primary_key=True, index=True)
     agent_id = Column(String, nullable=False, index=True)
     user_id = Column(String, nullable=False, index=True)

@@ -1,5 +1,31 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export interface ShoppingResult {
+  intent: string;
+  agent_proposal: { product_id: string; product: string; amount: number; currency: string; merchant_id: string };
+  agent_reasoning: string;
+  model: string;
+  guard_model: string;
+  decision: string;
+  risk_score: number;
+  intent_score: number;
+  reasons: string[];
+  transaction_id: string;
+}
+
+export async function runShoppingAgent(agent_id: string, user_intent: string): Promise<ShoppingResult> {
+  const res = await fetch(`${API_BASE}/agent/shop`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_id, user_intent }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(typeof err.detail === "string" ? err.detail : "Shopping agent request failed");
+  }
+  return res.json();
+}
+
 export async function fetchStats() {
   const res = await fetch(`${API_BASE}/dashboard/stats`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch stats");

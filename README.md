@@ -1,3 +1,67 @@
+# Open Agent Hackathon 2026 — Track: Reasoning Architecture
+
+**An AI shopping agent that can't be tricked into spending your money: data, rules, memory and Nemotron reasoning combine into one reliable ALLOW/REVIEW/BLOCK decision before any payment.**
+
+PayWall.ai's agent proposes one product from a **15-item local development catalog**; the existing Guard independently authorizes it. Catalog prices and merchant IDs come from server data, never model-generated financial fields. The catalog reuses seeded merchants and does not claim live inventory.
+
+| Track component | Implementation |
+| --- | --- |
+| Data | XGBoost risk model on 7,000 synthetic transactions, split 80/20 for training/holdout |
+| Knowledge | Deterministic agent, merchant, category, transaction-limit and daily-budget policies |
+| Memory | Persistent daily spend, transaction history and audit trail in the existing database |
+| Reasoning | Nemotron catalog selection, independent intent check, complementary upsell selection |
+| Reliable decisions | Existing fail-closed Guard: uncertain autonomous approvals become REVIEW; violations BLOCK |
+| Actions | Existing Razorpay test payment flow after Guard authorization |
+
+| Sponsor technology | Where and what |
+| --- | --- |
+| NVIDIA Nemotron | `backend/app/ml/intent_matcher.py`: hosted chat completions for catalog selection and intent verification; used by `shopping_agent.py` and `upsell_agent.py` |
+| Cursor | Development editor used to build the original application; this targeted extension was implemented with Codex |
+
+```mermaid
+flowchart LR
+    U[User intent] --> S[Shopping Agent: Nemotron]
+    S --> P[Guard: policy rules]
+    P --> M[XGBoost risk]
+    M --> N[Nemotron intent verification]
+    N --> D{ALLOW / REVIEW / BLOCK}
+    D --> A[Audit trail]
+    D -->|authorized existing payment flow| R[Razorpay test payments]
+```
+
+The diagram shows the conceptual layers. In code, intent is computed before XGBoost because intent similarity is one of the model's inputs. The Guard, rather than the shopping or upsell model, makes the authorization decision.
+
+**Added during this hackathon:** NVIDIA-first provider selection, `/agent/shop`, the local catalog, model provenance in API decision responses and audit payloads, Nemotron upsell selection with reasons, and the dashboard Shopping Agent box. Reused: the three-layer engine, trained risk model, policies, database memory, dashboards, review workflow and Razorpay integration. No new Zetaris or Meterless integration is claimed in this focused submission.
+
+### Hackathon setup
+
+1. Install backend dependencies with `cd backend`, `python -m pip install -r requirements.txt -r requirements-dev.txt`.
+2. Copy `backend/.env.example` to `backend/.env`. For local SQLite use `DATABASE_URL=sqlite:///./agent_guard.db`. Leave unused provider/payment keys empty instead of the example placeholders.
+3. Set `NVIDIA_API_KEY` and `NVIDIA_MODEL` in **backend/.env only**. Choose a current Nemotron model ID from [NVIDIA's catalog](https://build.nvidia.com). The API uses the [documented hosted endpoint](https://docs.api.nvidia.com/nim/reference/llm-apis), `https://integrate.api.nvidia.com/v1`, through the existing OpenAI Python client. No fixed model ID is assumed.
+4. Seed data with `python scripts/seed_db.py`, then start the backend with `python -m uvicorn app.main:app --port 8000` from `backend`.
+5. In another terminal, `cd frontend`, `npm ci`, then `npm run dev`. Open `http://localhost:3000/dashboard`. The frontend defaults to `http://localhost:8000`; use `NEXT_PUBLIC_API_URL` to change it, never for server API keys.
+6. Run `cd backend && python -m pytest -q`, and `cd frontend && npm run build`. With both servers running, run `npm run e2e` from `frontend`.
+
+**Provider behavior:** NVIDIA (when key and model are set) → Groq → OpenAI → keyword fallback labeled `rules_only`. Calls have a 10-second timeout and no SDK retries. Invalid catalog IDs, malformed responses and nonfinite/out-of-range intent scores are rejected. Model selection cannot override policy failures. The existing engine retains its tested small, unequivocal low-risk fallback exception; ambiguous purchases become REVIEW or BLOCK according to risk, never an invented LLM approval.
+
+**API:** `POST /agent/shop` with `{"agent_id":"AGT-001","user_intent":"Buy running shoes under 5000"}` returns `intent`, verified `agent_proposal`, `agent_reasoning`, proposal `model`, `guard_model`, `decision`, `risk_score`, `intent_score`, `reasons`, and `transaction_id`. The new shopping endpoint records authorization and reserves daily spend through the existing engine, but **does not execute payment**. Existing payment/review routes remain separate. This is an authorization demo, not a new checkout UI.
+
+### Three-minute recording
+
+- **0:00–0:30:** Explain the problem and the Data / Knowledge / Memory / Reasoning architecture. Show the Shopping Agent box.
+- **0:30–1:20:** Enter “Buy running shoes under 5000.” Show the catalog-backed proposal, model names, Guard decision, scores and audit transaction ID. A configured, responding LLM should produce ALLOW for a matching low-risk purchase on a fresh agent.
+- **1:20–2:10:** Propose an upsell through `POST /transactions/{transaction_id}/upsell`. Nemotron can select ₹149 running socks. Then evaluate a ₹14,999 insurance “Premium Protection Plan” against the same shoes intent; policy rejects it even if a model claims a match.
+- **2:10–2:50:** Call `POST /dashboard/llm-toggle?disabled=true`, then shop for “Buy shoes or running shoes under 5000.” Show `rules_only` and REVIEW. Restore with `?disabled=false`.
+- **2:50–3:00:** Show the audit trail and explain the deployment/credential limitations honestly.
+
+Run `python scripts/demo_shopping.py` from `backend` for the live HTTP cases (seed merchants first). For a reproducible **mocked-inference** demonstration without credentials, run `python scripts/demo_shopping.py --mock-llm`; this uses the real Guard and an isolated in-memory database. Mocked inference is not evidence of live NVIDIA connectivity. Live results, including model outages and BLOCK/REVIEW outcomes, are printed unchanged. Use a fresh demo agent to avoid accumulated daily spend and velocity changing subsequent decisions.
+
+Slide outline: **1)** the payment manipulation problem; **2)** five track components and architecture; **3)** legitimate purchase vs. malicious upsell; **4)** outage behavior, audit evidence, sponsor integration and known limits.
+
+Current scope: local catalog, simple numeric budget phrases, and existing model-based semantic verification. Full structured intent parsing, live inventory, external memory/data integrations and a new user-confirmed checkout are outside this small extension. Live Nemotron and Razorpay verification require valid credentials; see the [verification report](docs/hackathon-verification.md) for results of this run.
+
+---
+
 # Agent Commerce Guard
 
 > Razorpay AI Buildathon 2026 — Track 01: AI Growth & Agentic Commerce

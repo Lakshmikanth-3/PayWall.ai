@@ -13,6 +13,7 @@ exists at all. It never decides ALLOW/REVIEW/BLOCK — that's the Guard's job.
 
 from typing import Optional
 from app import models
+from app.ml.intent_matcher import choose_catalog_item
 
 # Complementary add-ons per category, ordered cheapest-first so the agent
 # proposes the smallest fitting item rather than maxing out the remaining
@@ -89,9 +90,22 @@ def propose_upsell(agent: models.Agent, original_txn: models.Transaction) -> Opt
     # Prefer the largest item that still fits comfortably within budget —
     # more incremental revenue without exceeding what the user authorized.
     best = max(fitting, key=lambda c: c["amount"])
+    reasoning = "Largest complementary item within the remaining budget."
+    model = "rules_only"
+    selection = choose_catalog_item(
+        getattr(original_txn, "user_intent", "") or original_txn.category,
+        [{"product_id": str(i), **c} for i, c in enumerate(fitting)],
+        "Choose the most relevant complementary add-on to " + getattr(original_txn, "product", original_txn.category) +
+        ". Prefer running socks for running shoes. Respect explicit exclusions.",
+    )
+    if selection:
+        selected, reasoning, model = selection
+        best = fitting[int(selected["product_id"])]
     return {
         "product": best["product"],
         "category": original_txn.category,
         "amount": best["amount"],
         "merchant_id": original_txn.merchant_id,
+        "reasoning": reasoning,
+        "model": model,
     }

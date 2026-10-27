@@ -1,0 +1,94 @@
+{
+  "mode": "live_http",
+  "shopping": {
+    "intent": "Buy running shoes under 5000",
+    "agent_proposal": {
+      "product_id": "running-shoes",
+      "product": "Running Shoes",
+      "category": "sports",
+      "amount": 4799,
+      "merchant_id": "MER-001",
+      "currency": "INR"
+    },
+    "agent_reasoning": "Keyword match from the local development catalog; Guard verification required.",
+    "model": "rules_only",
+    "guard_model": "rules_only",
+    "decision": "REVIEW",
+    "risk_score": 0.23,
+    "intent_score": 0.6667,
+    "reasons": [
+      "AI reasoning unavailable. Unsafe autonomous approval prevented. Transaction moved to REVIEW as a precaution."
+    ],
+    "transaction_id": "TXN-D1FAE09F"
+  },
+  "upsell": {
+    "skipped": "Original purchase was not ALLOW; live inference may be unconfigured or unavailable."
+  },
+  "manipulated_protection_plan": {
+    "model": "rules_only",
+    "transaction_id": "TXN-0F5DB8FA",
+    "decision_id": "DEC-69E6B793",
+    "decision": "BLOCK",
+    "risk_score": 100.0,
+    "intent_match_score": 0.0,
+    "policy_violations": [
+      "Amount \u20b914,999 exceeds max transaction \u20b95,000",
+      "Daily budget exceeded \u2014 spent \u20b90, limit \u20b910,000",
+      "Category 'insurance' is not authorized for this agent"
+    ],
+    "policy_checks": [
+      {
+        "check": "Agent authenticated & active",
+        "passed": true,
+        "detail": "Agent status: ACTIVE, Payment enabled: True"
+      },
+      {
+        "check": "Merchant not blocked",
+        "passed": true,
+        "detail": "Merchant blocked: False"
+      },
+      {
+        "check": "Within maximum transaction limit",
+        "passed": false,
+        "detail": "\u20b914,999 vs limit \u20b95,000"
+      },
+      {
+        "check": "Within daily budget",
+        "passed": false,
+        "detail": "Daily spent: \u20b90 / \u20b910,000. Remaining: \u20b910,000"
+      },
+      {
+        "check": "Category authorized",
+        "passed": false,
+        "detail": "Category: insurance. Allowed: ['sports', 'electronics', 'food', 'groceries']. Blocked: ['gambling', 'financial_services']"
+      }
+    ],
+    "reason": "Transaction blocked due to policy violations: Amount \u20b914,999 exceeds max transaction \u20b95,000; Daily budget exceeded \u2014 spent \u20b90, limit \u20b910,000; Category 'insurance' is not authorized for this agent.",
+    "confidence": 1.0,
+    "requires_human_review": false,
+    "decision_latency_ms": 63.66,
+    "is_upsell": true,
+    "attributed_to": "Upsell Agent"
+  },
+  "llm_off_ambiguous": {
+    "intent": "Buy shoes or running shoes under 5000",
+    "agent_proposal": {
+      "product_id": "running-shoes",
+      "product": "Running Shoes",
+      "category": "sports",
+      "amount": 4799,
+      "merchant_id": "MER-001",
+      "currency": "INR"
+    },
+    "agent_reasoning": "Keyword match from the local development catalog; Guard verification required.",
+    "model": "rules_only",
+    "guard_model": "rules_only",
+    "decision": "REVIEW",
+    "risk_score": 0.75,
+    "intent_score": 0.5,
+    "reasons": [
+      "AI reasoning unavailable. Unsafe autonomous approval prevented. Transaction moved to REVIEW as a precaution."
+    ],
+    "transaction_id": "TXN-277F4593"
+  }
+}

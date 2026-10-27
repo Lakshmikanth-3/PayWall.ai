@@ -99,6 +99,7 @@ class PolicyCheck(BaseModel):
 
 
 class DecisionResponse(BaseModel):
+    model: str = "unknown"
     transaction_id: str
     decision_id: str
     decision: Decision
@@ -115,6 +116,7 @@ class DecisionResponse(BaseModel):
 
 
 class TransactionResponse(BaseModel):
+    model: str = "unknown"
     id: str
     decision_id: Optional[str]
     agent_id: str
@@ -149,6 +151,7 @@ class TransactionResponse(BaseModel):
 # ─── Upsell / Revenue Growth Layer — PRD Section 2a ───────────────────────────
 
 class UpsellProposalResponse(BaseModel):
+    model: str = "rules_only"
     proposed: bool
     reason: str
     original_transaction_id: str

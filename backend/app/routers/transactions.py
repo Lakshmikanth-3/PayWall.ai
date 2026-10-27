@@ -173,10 +173,18 @@ def propose_upsell_for_transaction(txn_id: str, db: Session = Depends(get_db)):
         upsell_of_transaction_id=txn_id,
     )
     decision_result = evaluate(upsell_req, db)
+    db.add(models.AuditLog(
+        id=f"AUD-{__import__('uuid').uuid4().hex[:8].upper()}",
+        transaction_id=decision_result.transaction_id, event_type="UPSELL_PROPOSAL",
+        payload={"model": candidate.get("model", "rules_only"),
+                 "reasoning": candidate.get("reasoning", ""), "product": candidate["product"]},
+    ))
+    db.commit()
 
     return schemas.UpsellProposalResponse(
         proposed=True,
-        reason=f"Proposed {candidate['product']} (₹{candidate['amount']:,.0f}) as a complementary add-on.",
+        model=candidate.get("model", "rules_only"),
+        reason=f"Proposed {candidate['product']} (₹{candidate['amount']:,.0f}). " + candidate.get("reasoning", "Complementary add-on."),
         original_transaction_id=txn_id,
         decision=decision_result,
     )

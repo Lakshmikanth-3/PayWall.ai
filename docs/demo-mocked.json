@@ -1,0 +1,139 @@
+{
+  "mode": "mock_inference_real_guard_isolated_db",
+  "shopping": {
+    "intent": "Buy running shoes under 5000",
+    "agent_proposal": {
+      "product_id": "running-shoes",
+      "product": "Running Shoes",
+      "category": "sports",
+      "amount": 4799,
+      "merchant_id": "MER-001",
+      "currency": "INR"
+    },
+    "agent_reasoning": "Relevant catalog item within the available budget (mock inference).",
+    "model": "mock-nemotron",
+    "guard_model": "mock-nemotron",
+    "decision": "ALLOW",
+    "risk_score": 0.35,
+    "intent_score": 0.98,
+    "reasons": [
+      "Transaction matches user intent and agent policy. Risk score: 0/100."
+    ],
+    "transaction_id": "TXN-CF234B33"
+  },
+  "upsell": {
+    "model": "mock-nemotron",
+    "proposed": true,
+    "reason": "Proposed Moisture-wicking Running Socks (\u20b9149). Relevant catalog item within the available budget (mock inference).",
+    "original_transaction_id": "TXN-CF234B33",
+    "decision": {
+      "model": "mock-nemotron",
+      "transaction_id": "TXN-50B1B81C",
+      "decision_id": "DEC-E1A8B2B3",
+      "decision": "ALLOW",
+      "risk_score": 0.04,
+      "intent_match_score": 0.98,
+      "policy_violations": [],
+      "policy_checks": [
+        {
+          "check": "Agent authenticated & active",
+          "passed": true,
+          "detail": "Agent status: ACTIVE, Payment enabled: True"
+        },
+        {
+          "check": "Merchant not blocked",
+          "passed": true,
+          "detail": "Merchant blocked: False"
+        },
+        {
+          "check": "Within maximum transaction limit",
+          "passed": true,
+          "detail": "\u20b9149 vs limit \u20b95,000"
+        },
+        {
+          "check": "Within daily budget",
+          "passed": true,
+          "detail": "Daily spent: \u20b94,799 / \u20b910,000. Remaining: \u20b95,201"
+        },
+        {
+          "check": "Category authorized",
+          "passed": true,
+          "detail": "Category: sports. Allowed: ['sports', 'electronics', 'food', 'groceries']. Blocked: ['gambling', 'financial_services']"
+        }
+      ],
+      "reason": "Transaction matches user intent and agent policy. Risk score: 0/100.",
+      "confidence": 1.0,
+      "requires_human_review": false,
+      "decision_latency_ms": 14.92,
+      "is_upsell": true,
+      "attributed_to": "Upsell Agent"
+    }
+  },
+  "manipulated_protection_plan": {
+    "model": "mock-nemotron",
+    "transaction_id": "TXN-51DC01CB",
+    "decision_id": "DEC-D27BFCAC",
+    "decision": "BLOCK",
+    "risk_score": 100.0,
+    "intent_match_score": 0.98,
+    "policy_violations": [
+      "Amount \u20b914,999 exceeds max transaction \u20b95,000",
+      "Daily budget exceeded \u2014 spent \u20b94,948, limit \u20b910,000",
+      "Category 'insurance' is not authorized for this agent"
+    ],
+    "policy_checks": [
+      {
+        "check": "Agent authenticated & active",
+        "passed": true,
+        "detail": "Agent status: ACTIVE, Payment enabled: True"
+      },
+      {
+        "check": "Merchant not blocked",
+        "passed": true,
+        "detail": "Merchant blocked: False"
+      },
+      {
+        "check": "Within maximum transaction limit",
+        "passed": false,
+        "detail": "\u20b914,999 vs limit \u20b95,000"
+      },
+      {
+        "check": "Within daily budget",
+        "passed": false,
+        "detail": "Daily spent: \u20b94,948 / \u20b910,000. Remaining: \u20b95,052"
+      },
+      {
+        "check": "Category authorized",
+        "passed": false,
+        "detail": "Category: insurance. Allowed: ['sports', 'electronics', 'food', 'groceries']. Blocked: ['gambling', 'financial_services']"
+      }
+    ],
+    "reason": "Mock explanation: Guard policy blocks the unauthorized insurance category and over-budget amount.",
+    "confidence": 1.0,
+    "requires_human_review": false,
+    "decision_latency_ms": 14.05,
+    "is_upsell": true,
+    "attributed_to": "Upsell Agent"
+  },
+  "llm_off_ambiguous": {
+    "intent": "Buy shoes or running shoes under 5000",
+    "agent_proposal": {
+      "product_id": "running-shoes",
+      "product": "Running Shoes",
+      "category": "sports",
+      "amount": 4799,
+      "merchant_id": "MER-001",
+      "currency": "INR"
+    },
+    "agent_reasoning": "Keyword match from the local development catalog; Guard verification required.",
+    "model": "rules_only",
+    "guard_model": "rules_only",
+    "decision": "REVIEW",
+    "risk_score": 44.89,
+    "intent_score": 0.5,
+    "reasons": [
+      "Transaction reviewed. Risk score: 45/100. Intent match: 50%."
+    ],
+    "transaction_id": "TXN-BF356A52"
+  }
+}

@@ -15,6 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 os.environ["GROQ_API_KEY"] = ""
 os.environ["OPENAI_API_KEY"] = ""
+os.environ["NVIDIA_API_KEY"] = ""
+os.environ["NVIDIA_MODEL"] = ""
 os.environ["RAZORPAY_KEY_ID"] = ""
 os.environ["RAZORPAY_KEY_SECRET"] = ""
 os.environ["SECRET_KEY"] = "test-secret-key"

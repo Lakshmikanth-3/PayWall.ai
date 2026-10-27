@@ -6,6 +6,7 @@ import { formatLargeNumber, riskColor, timeAgo } from "@/lib/utils";
 import DecisionBadge from "@/components/DecisionBadge";
 import RiskMeter from "@/components/RiskMeter";
 import AnimatedCounter from "@/components/AnimatedCounter";
+import ShoppingAgent from "@/components/ShoppingAgent";
 import { motion, Reveal, StaggerGroup, fadeUp } from "@/components/motion";
 import {
   ShieldCheck, TrendingUp, AlertTriangle, DollarSign,
@@ -113,13 +114,15 @@ export default function DashboardPage() {
       <Reveal className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">PayWall.ai</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Real-time AI agent payment oversight</p>
+          <p className="text-slate-400 text-sm mt-0.5">Command Center · Real-time AI agent payment oversight</p>
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-xs font-medium text-emerald-400">Guard Active</span>
         </div>
       </Reveal>
+
+      <ShoppingAgent />
 
       {/* Merchant Revenue Impact — PRD Section 17.A */}
       <Reveal delay={0.05} className="glass p-5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent border-emerald-500/15">

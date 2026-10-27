@@ -186,7 +186,7 @@ def evaluate(
     # ── Layer 3: Intent match — always computed for real (never a hardcoded
     # placeholder) so the audit trail's intent_match_score is meaningful even
     # when a hard policy violation blocks the transaction outright. ──────────
-    intent_score, reasoning, llm_latency_ms, llm_used = match_intent(
+    intent_result = match_intent(
         user_intent=req.user_intent,
         product=req.product,
         category=req.category,
@@ -194,6 +194,8 @@ def evaluate(
         max_amount=agent.max_transaction,
         is_upsell=req.is_upsell,
     )
+    intent_score, reasoning, llm_latency_ms, llm_used = intent_result
+    decision_model = getattr(intent_result, "model", "unknown" if llm_used else "rules_only")
 
     # ── Layer 2: ML risk scoring ───────────────────────────────────────────────
     # Count recent transactions for velocity — must stay windowed to match how
@@ -279,6 +281,7 @@ def evaluate(
         decision=decision.value,
         risk_score=risk_score,
         intent_match_score=intent_score,
+        decision_detail={"model": decision_model, "llm_used": llm_used},
         policy_violations=violations,
         policy_checks=[c.model_dump() for c in policy_checks],
         reason=explanation,
@@ -307,6 +310,9 @@ def evaluate(
             "decision": decision.value,
             "risk_score": risk_score,
             "violations": violations,
+            "model": decision_model,
+            "intent_score": intent_score,
+            "intent_reasoning": reasoning,
         },
     )
     db.add(audit)
@@ -338,6 +344,7 @@ def evaluate(
     confidence = min(round(confidence, 3), 1.0)
 
     return schemas.DecisionResponse(
+        model=decision_model,
         transaction_id=txn_id,
         decision_id=decision_id,
         decision=decision,

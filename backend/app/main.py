@@ -4,6 +4,7 @@ from app.config import settings
 from app.database import engine
 from app import models
 from app.routers import agents, merchants, transactions, dashboard, admin
+from app.shopping_agent import router as shopping_router
 
 # Create tables
 models.Base.metadata.create_all(bind=engine)
@@ -29,6 +30,7 @@ app.include_router(merchants.router)
 app.include_router(transactions.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
+app.include_router(shopping_router)
 
 
 @app.get("/")
