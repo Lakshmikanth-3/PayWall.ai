@@ -130,7 +130,19 @@ def test_upsell_llm_selects_socks_and_audits_model(client, db_session, monkeypat
     assert audit.payload["model"] == "test-nemotron"
 
 
+def test_nightshift_preferred_over_nvidia_direct(monkeypatch):
+    monkeypatch.setattr(intent_matcher.settings, "METERLESS_BASE_URL", "http://127.0.0.1:8088/v1")
+    monkeypatch.setattr(intent_matcher.settings, "METERLESS_RUNTIME_TOKEN", "test-runtime-token")
+    monkeypatch.setattr(intent_matcher.settings, "METERLESS_MODEL", "nvidia/nemotron-test")
+    monkeypatch.setattr(intent_matcher.settings, "NVIDIA_API_KEY", "test-key")
+    monkeypatch.setattr(intent_matcher.settings, "NVIDIA_MODEL", "test-nemotron")
+    client = intent_matcher._openai_client()
+    assert str(client.base_url) == "http://127.0.0.1:8088/v1/"
+    assert intent_matcher._model_for(client) == "nvidia/nemotron-test"
+
+
 def test_nvidia_preferred_and_model_matches_client(monkeypatch):
+    monkeypatch.setattr(intent_matcher.settings, "METERLESS_BASE_URL", "")
     monkeypatch.setattr(intent_matcher.settings, "NVIDIA_API_KEY", "test-key")
     monkeypatch.setattr(intent_matcher.settings, "NVIDIA_MODEL", "test-nemotron")
     monkeypatch.setattr(intent_matcher.settings, "GROQ_API_KEY", "test-groq")

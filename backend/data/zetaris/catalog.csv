@@ -1,0 +1,16 @@
+product_id,product,category,amount,merchant_id,currency
+running-shoes,Running Shoes,sports,4799,MER-001,INR
+road-shoes,Lightweight Road Running Shoes,sports,3999,MER-008,INR
+running-socks,Running Socks,sports,149,MER-001,INR
+water-bottle,Sports Water Bottle,sports,299,MER-008,INR
+headphones,Wireless Headphones,electronics,2499,MER-002,INR
+charger,Phone Charger,electronics,799,MER-002,INR
+laptop-bag,Waterproof Laptop Bag,electronics,1799,MER-009,INR
+mouse,Wireless Mouse,electronics,599,MER-009,INR
+keyboard,USB Keyboard,electronics,999,MER-002,INR
+groceries,Weekly Grocery Pack,groceries,899,MER-003,INR
+fruit,Fresh Fruit Basket,groceries,499,MER-003,INR
+rice,Rice Bag,groceries,699,MER-003,INR
+pizza,Vegetable Pizza,food,349,MER-005,INR
+lunch,Lunch Bowl,food,249,MER-005,INR
+flight,Domestic Flight Ticket,travel,7999,MER-004,INR

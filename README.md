@@ -2,21 +2,24 @@
 
 **An AI shopping agent that can't be tricked into spending your money: data, rules, memory and Nemotron reasoning combine into one reliable ALLOW/REVIEW/BLOCK decision before any payment.**
 
-PayWall.ai's agent proposes one product from a **15-item local development catalog**; the existing Guard independently authorizes it. Catalog prices and merchant IDs come from server data, never model-generated financial fields. The catalog reuses seeded merchants and does not claim live inventory.
+PayWall.ai's shopping agent reads the merchant catalog from **Zetaris**, recalls similar past decisions from the **Meterless H-MEM** engine, asks **NVIDIA Nemotron through Meterless Nightshift** to pick one product, and hands it to the Guard, which independently authorizes it (its own intent check also runs on Nemotron). If the Guard blocks the pick, the shopper retries once with that product excluded. Prices and merchant IDs always come from server data, never from the model. The catalog is a 15-row development dataset linked to the seeded merchants, not live inventory.
 
 | Track component | Implementation |
 | --- | --- |
 | Data | XGBoost risk model on 7,000 synthetic transactions, split 80/20 for training/holdout |
 | Knowledge | Deterministic agent, merchant, category, transaction-limit and daily-budget policies |
-| Memory | Persistent daily spend, transaction history and audit trail in the existing database |
+| Memory | Meterless H-MEM: recalls similar past purchase decisions before each pick and saves every outcome; plus daily spend, history and audit trail in the database |
 | Reasoning | Nemotron catalog selection, independent intent check, complementary upsell selection |
 | Reliable decisions | Existing fail-closed Guard: uncertain autonomous approvals become REVIEW; violations BLOCK |
 | Actions | Existing Razorpay test payment flow after Guard authorization |
 
 | Sponsor technology | Where and what |
 | --- | --- |
-| NVIDIA Nemotron | `backend/app/ml/intent_matcher.py`: hosted chat completions for catalog selection and intent verification; used by `shopping_agent.py` and `upsell_agent.py` |
-| Cursor | Development editor used to build the original application; this targeted extension was implemented with Codex |
+| Zetaris (data layer) | `backend/app/zetaris.py`, `backend/scripts/zetaris_setup.py`: the catalog export (`backend/data/zetaris/catalog.csv`) is registered as the file-store table `paywall.catalog`; every live shopping request reads it with SQL. If Zetaris is down, the labelled sample copy is used and the trace says so |
+| Meterless Nightshift (primary AI provider) | `backend/app/ml/intent_matcher.py`: all model calls go to the Nightshift runtime (`METERLESS_BASE_URL`, OpenAI-compatible), model `nvidia/nemotron-3.5-lightning-30b-a3b`; NVIDIA direct, Groq and OpenAI remain fallbacks |
+| Meterless Engine: H-MEM | `backend/engines/hmem/` (unmodified Apache-2.0 reference, run by Node 22 via `cli.ts`), called from `backend/app/hmem_bridge.py`: recall before each pick, save after each Guard decision |
+| NVIDIA Nemotron | Served through Nightshift: picks the product (ShopperAgent) and verifies intent inside the Guard; the served model is logged on every request |
+| Cursor | Original development editor; this extension was implemented with Claude Code and Codex |
 
 ```mermaid
 flowchart LR
@@ -31,7 +34,24 @@ flowchart LR
 
 The diagram shows the conceptual layers. In code, intent is computed before XGBoost because intent similarity is one of the model's inputs. The Guard, rather than the shopping or upsell model, makes the authorization decision.
 
-**Added during this hackathon:** NVIDIA-first provider selection, `/agent/shop`, the local catalog, model provenance in API decision responses and audit payloads, Nemotron upsell selection with reasons, and the dashboard Shopping Agent box. Reused: the three-layer engine, trained risk model, policies, database memory, dashboards, review workflow and Razorpay integration. No new Zetaris or Meterless integration is claimed in this focused submission.
+**Added during this hackathon:** Zetaris catalog data layer, Meterless Nightshift provider, H-MEM memory, the five-agent trace with a Guard-driven retry, NVIDIA-first provider selection, `/agent/shop`, the local catalog, model provenance in API decision responses and audit payloads, Nemotron upsell selection with reasons, and the dashboard Shopping Agent box. Reused: the three-layer engine, trained risk model, policies, database memory, dashboards, review workflow and Razorpay integration. The original application (Guard, risk model, policies, dashboards, Razorpay flow) was built before the build window and is declared as pre-existing.
+
+### Agents and trace
+
+Each `/agent/shop` call writes JSON lines to stdout and `backend/logs/<run_id>.jsonl`:
+`PlannerAgent` (parses the budget in code) → `CatalogAgent` (Zetaris SQL) → `MemoryAgent` (H-MEM recall) → `ShopperAgent` (Nemotron via Nightshift) → `GuardAgent` (policy, risk model, Nemotron intent check; on BLOCK it sends the shopper back once with that product excluded) → `MemoryAgent` (H-MEM save). Live examples with their traces: `input_examples/`, `output_examples/`.
+
+### Run with live sponsors
+
+```sh
+cd backend
+python scripts/zetaris_setup.py        # registers paywall.catalog in Zetaris and reads it back
+python -m uvicorn app.main:app --port 8000
+curl -X POST localhost:8000/agents -H "Content-Type: application/json" -d '{"name":"Shopper","max_transaction":5000,"daily_limit":10000,"allowed_categories":["sports","electronics","food","groceries"],"blocked_categories":[],"requires_approval_above":4900}'
+curl -X POST localhost:8000/agent/shop -H "Content-Type: application/json" -d '{"agent_id":"<id>","user_intent":"Buy running shoes for my first marathon under 5000"}'
+```
+
+`SAMPLE_MODE=true` runs the same flow with no Nightshift or Zetaris (labelled sample catalog and rules-based choice; H-MEM still runs locally on Node 22).
 
 ### Hackathon setup
 

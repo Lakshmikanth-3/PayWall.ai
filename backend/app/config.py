@@ -9,6 +9,17 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     NVIDIA_API_KEY: str = ""
     NVIDIA_MODEL: str = ""
+    # Meterless Nightshift (primary AI provider; OpenAI-compatible local runtime)
+    METERLESS_BASE_URL: str = ""
+    METERLESS_RUNTIME_TOKEN: str = ""
+    METERLESS_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    # Zetaris (data layer): REST URL of the local install, org id and credentials
+    ZETARIS_BASE_URL: str = ""
+    ZETARIS_ORG_ID: str = "1"
+    ZETARIS_USERNAME: str = ""
+    ZETARIS_PASSWORD: str = ""
+    ZETARIS_SCHEMA: str = "paywall"
+    SAMPLE_MODE: bool = False
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
     ALLOW_ORIGINS: str = "http://localhost:3000"

@@ -21,3 +21,7 @@ backend/data/*.parquet
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent traces and H-MEM state are created at runtime
+backend/logs/
+backend/data/hmem/
